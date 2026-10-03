@@ -196,42 +196,56 @@ _zsh_autocompllama_context() {
   fi
 }
 
-# Send one chat request to ollama and print the assistant's reply.
-# Usage: _zsh_autocompllama_chat <system prompt> <user prompt> [<format JSON>]
-# With a format (a JSON schema) the reply is constrained to match it. Without
-# one, generation stops at the first newline since a command is a single line.
-# Errors go to stderr with a non-zero return.
-_zsh_autocompllama_chat() {
-  local system_prompt=$1 user_prompt=$2 format=${3:-'""'}
+# The same context as a shell-session transcript: comment header, then the
+# recent commands oldest first as prompt lines, ready for the partial command
+# to be appended as the last line and continued.
+_zsh_autocompllama_transcript() {
+  local branch
+  branch=$(command git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
-  local request_body
-  request_body=$(jq -n \
+  print -r -- "# Shell session on $_ZSH_AUTOCOMPLLAMA_OS"
+  print -r -- "# Directory: $PWD${branch:+ (git branch: $branch)}"
+
+  if (( ZSH_AUTOCOMPLLAMA_MAX_FILES > 0 )); then
+    local -a entries
+    entries=( ${(f)"$(command ls -1Ap 2>/dev/null | head -n $ZSH_AUTOCOMPLLAMA_MAX_FILES)"} )
+    (( $#entries )) && print -r -- "# Files: ${(j:, :)entries}"
+  fi
+
+  local -a lines
+  lines=( ${(f)"$(_zsh_autocompllama_recent_commands $ZSH_AUTOCOMPLLAMA_MAX_HISTORY)"} )
+  local l
+  for l in "${(Oa)lines[@]}"; do
+    print -r -- "\$ $l"
+  done
+}
+
+# The request fields shared by every call: model, keep-alive and decoding
+# options. Printed as JSON for jq to merge into.
+_zsh_autocompllama_request_base() {
+  jq -n \
     --arg model "$ZSH_OLLAMA_MODEL" \
-    --arg system "$system_prompt" \
-    --arg prompt "$user_prompt" \
     --arg keep_alive "$ZSH_AUTOCOMPLLAMA_KEEP_ALIVE" \
     --argjson num_ctx "$ZSH_AUTOCOMPLLAMA_NUM_CTX" \
     --argjson num_predict "$ZSH_AUTOCOMPLLAMA_NUM_PREDICT" \
-    --argjson format "$format" \
     '{
       model: $model,
-      messages: [
-        {role: "system", content: $system},
-        {role: "user", content: $prompt}
-      ],
       stream: false,
       keep_alive: ($keep_alive | tonumber? // $keep_alive),
-      options: {
-        temperature: 0,
-        num_ctx: $num_ctx,
-        num_predict: $num_predict
-      }
-    }
-    | if $format == "" then .options.stop = ["\n"] else .format = $format end')
+      options: {temperature: 0, num_ctx: $num_ctx, num_predict: $num_predict}
+    }'
+}
+
+# POST a JSON body to an ollama endpoint and print the response JSON.
+# Connection and ollama-reported errors go to stderr with a non-zero return.
+# Usage: _zsh_autocompllama_post <endpoint> <json body>
+_zsh_autocompllama_post() {
+  # (not 'path': that name is tied to $PATH in zsh)
+  local endpoint=$1 request_body=$2
 
   local response
   if ! response=$(curl --silent --show-error --fail --connect-timeout 2 \
-      "${ZSH_OLLAMA_URL}/api/chat" \
+      "${ZSH_OLLAMA_URL}${endpoint}" \
       -H "Content-Type: application/json" \
       -d "$request_body" 2>&1); then
     print -u2 -r -- "zsh-autocompllama: request failed: $response"
@@ -245,18 +259,47 @@ _zsh_autocompllama_chat() {
     return 1
   fi
 
-  printf '%s' "$response" | jq -r '.message.content // empty'
+  printf '%s' "$response"
 }
 
-# Strip the markdown fences, backticks and surrounding whitespace that models
-# add despite instructions, and print what is left.
-_zsh_autocompllama_clean() {
-  setopt localoptions extendedglob
-  local text
-  text=$(printf '%s' "$1" | sed -E -e '/^[[:space:]]*```/d' -e 's/^`(.*)`$/\1/')
-  text=${text##[[:space:]]#}
-  text=${text%%[[:space:]]#}
-  print -r -- "$text"
+# Send one chat request to ollama and print the assistant's reply, which is
+# constrained to match the given JSON schema.
+# Usage: _zsh_autocompllama_chat <system prompt> <user prompt> <format JSON>
+_zsh_autocompllama_chat() {
+  setopt localoptions pipefail
+  local system_prompt=$1 user_prompt=$2 format=$3
+
+  local request_body
+  request_body=$(_zsh_autocompllama_request_base | jq \
+    --arg system "$system_prompt" \
+    --arg prompt "$user_prompt" \
+    --argjson format "$format" \
+    '. + {
+      messages: [
+        {role: "system", content: $system},
+        {role: "user", content: $prompt}
+      ],
+      format: $format
+    }')
+
+  _zsh_autocompllama_post /api/chat "$request_body" | jq -r '.message.content // empty'
+}
+
+# Ask ollama to continue a raw prompt, stopping at the end of the line, and
+# print only the continuation. No chat template is applied, so the model is
+# completing text rather than answering a question: it can only ever produce
+# new characters after the prompt, never a rewrite of it.
+# Usage: _zsh_autocompllama_continue <prompt>
+_zsh_autocompllama_continue() {
+  setopt localoptions pipefail
+  local prompt=$1
+
+  local request_body
+  request_body=$(_zsh_autocompllama_request_base | jq \
+    --arg prompt "$prompt" \
+    '. + {prompt: $prompt, raw: true} | .options.stop = ["\n"]')
+
+  _zsh_autocompllama_post /api/generate "$request_body" | jq -r '.response // empty'
 }
 
 # Ask the model to choose among candidate commands. Prints the chosen command,
@@ -330,6 +373,7 @@ _zsh_autocompllama_valid_command() {
 # can run outside ZLE (tests, background jobs). Returns 1 on errors and 2 when
 # there is simply nothing to suggest; both print a reason to stderr.
 _zsh_autocompllama_complete() {
+  setopt localoptions extendedglob
   local partial=$1
   local completion
 
@@ -350,27 +394,17 @@ _zsh_autocompllama_complete() {
     return 2
   fi
 
-  local system_prompt="You are a shell command completion engine. \
-The user message describes the machine, the working directory, its files and the commands \
-the user recently ran there, followed by a partial terminal command after 'Partial command:'. \
-Reply with the single completed command only: no explanation, no markdown, no code fences, \
-no surrounding quotes, no newlines. Keep the characters the user already typed unchanged and \
-only append to them. Prefer file names and commands that appear in the context over invented \
-ones. If the task needs more than one command, combine them into one line."
-
-  local user_prompt
-  user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Partial command: $partial"
-
-  completion=$(_zsh_autocompllama_chat "$system_prompt" "$user_prompt") || return 1
-  completion=$(_zsh_autocompllama_clean "$completion")
-  if [[ -z $completion || $completion == $partial ]]; then
+  # The prompt is a session transcript ending with the partial command, so the
+  # model's reply is purely the characters that follow it.
+  local prompt continuation
+  prompt="$(_zsh_autocompllama_transcript)"$'\n'"\$ $partial"
+  continuation=$(_zsh_autocompllama_continue "$prompt") || return 1
+  continuation=${continuation%%[[:space:]]#}
+  if [[ -z $continuation ]]; then
     print -u2 -r -- "zsh-autocompllama: no completion from ${ZSH_OLLAMA_MODEL}"
     return 2
   fi
-  if [[ $completion != ${partial}* ]]; then
-    print -u2 -r -- "zsh-autocompllama: rejected suggestion (does not continue the line): $completion"
-    return 2
-  fi
+  completion="${partial}${continuation}"
   if ! _zsh_autocompllama_valid_command "$completion"; then
     print -u2 -r -- "zsh-autocompllama: rejected suggestion (unknown command or path): $completion"
     return 2
