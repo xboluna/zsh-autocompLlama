@@ -15,13 +15,15 @@ up:
    model as **candidates** and it has to pick one of them (or none). The reply
    is constrained with a JSON schema, so the worst case is a wrong *real*
    command, never a fabricated flag.
-2. Only when nothing in your history fits does it continue what you typed.
-   This is a raw text completion, not a chat: the prompt is a transcript of
-   your OS, working directory, file listing and recent commands ending with
-   your partial command, and the model can only add characters after it,
-   never rewrite it. The result is rejected unless its first word resolves to
-   a real command, builtin, function, alias or executable and every path-like
-   argument exists. You can turn this fallback off entirely.
+2. Only when nothing in your history fits does it finish what you typed.
+   This is a fill-in-the-middle completion, not a chat: the model sees a
+   transcript of your OS, working directory, file listing and recent commands
+   ending with your partial command, followed by the next prompt line, and
+   fills in what goes between. It can only add characters after what you
+   typed, never rewrite it, and it cannot just end the line. The result is
+   rejected unless its first word resolves to a real command, builtin,
+   function, alias or executable and every path-like argument exists. You can
+   turn this fallback off entirely.
 
 Requests run in the background, so the shell stays responsive while the model
 thinks, and a result is discarded if you kept typing in the meantime. If the
@@ -33,7 +35,9 @@ retrying on every keystroke.
 - zsh 5.9 or newer, `curl` and `jq`.
 - [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions),
   which displays the suggestions and handles accepting them.
-- [ollama](https://ollama.com) running locally with a model pulled. The default
+- [ollama](https://ollama.com) running locally with a code model pulled, one
+  with a fill-in-the-middle template (qwen2.5-coder, codellama, deepseek-coder,
+  starcoder2, codegemma). Other models work, with plainer continuations. The default
   is `qwen2.5-coder:0.5b`: ~0.5 GB resident, a few hundred milliseconds per
   completion on Apple Silicon. `qwen2.5-coder:1.5b` is noticeably smarter for
   ~1 GB.
@@ -134,10 +138,12 @@ the buffer is still what it was asked about. That function:
 2. If there are any, asks the model to choose with `_zsh_autocompllama_pick`,
    using ollama's structured output with an `enum` of the candidates plus
    `NONE`.
-3. Otherwise, or on `NONE`, asks `/api/generate` with `raw: true` to continue
-   the transcript from `_zsh_autocompllama_transcript` plus the partial
-   command (`_zsh_autocompllama_continue`), stopping at the end of the line,
-   and validates the result with `_zsh_autocompllama_valid_command`.
+3. Otherwise, or on `NONE`, asks `/api/generate` with the transcript from
+   `_zsh_autocompllama_transcript` plus the partial command as `prompt` and
+   the next prompt line as `suffix` (`_zsh_autocompllama_continue`), so the
+   model fills in the rest of the command, and validates the result with
+   `_zsh_autocompllama_valid_command`. A model without a fill-in-the-middle
+   template gets a plain raw continuation instead.
 
 Every request body is built with `jq` (so anything you type is escaped
 correctly) and uses temperature 0.
