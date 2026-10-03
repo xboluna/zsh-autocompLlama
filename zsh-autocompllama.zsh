@@ -17,14 +17,19 @@
 # ollama server.
 (( ! ${+ZSH_OLLAMA_URL} )) && typeset -g ZSH_OLLAMA_URL='http://localhost:11434'
 
-# Seconds of typing pause before the model is asked.
-(( ! ${+ZSH_AUTOCOMPLLAMA_DEBOUNCE} )) && typeset -g ZSH_AUTOCOMPLLAMA_DEBOUNCE=0.3
+# Seconds of typing pause before the model is asked. Completions take a few
+# hundred ms, so keep this short; a keystroke cancels a request in flight.
+(( ! ${+ZSH_AUTOCOMPLLAMA_DEBOUNCE} )) && typeset -g ZSH_AUTOCOMPLLAMA_DEBOUNCE=0.15
 # Do not ask for buffers shorter than this.
 (( ! ${+ZSH_AUTOCOMPLLAMA_MIN_CHARS} )) && typeset -g ZSH_AUTOCOMPLLAMA_MIN_CHARS=2
-# Prompt-expanded indicator appended to RPROMPT while the model is thinking.
-# Yellow rather than the dim colour 8, which many terminal palettes render
-# almost invisibly. Empty disables it.
-(( ! ${+ZSH_AUTOCOMPLLAMA_SPINNER} )) && typeset -g ZSH_AUTOCOMPLLAMA_SPINNER='%F{yellow}…%f'
+# Spinner shown at the right of the prompt while the model is thinking: a
+# string of single-character frames, cycled every SPINNER_INTERVAL seconds.
+# One character makes it static; empty disables it.
+(( ! ${+ZSH_AUTOCOMPLLAMA_SPINNER} )) && typeset -g ZSH_AUTOCOMPLLAMA_SPINNER='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+(( ! ${+ZSH_AUTOCOMPLLAMA_SPINNER_INTERVAL} )) && typeset -g ZSH_AUTOCOMPLLAMA_SPINNER_INTERVAL=0.08
+# Prompt colour of the spinner (yellow rather than the dim colour 8, which many
+# terminal palettes render almost invisibly).
+(( ! ${+ZSH_AUTOCOMPLLAMA_SPINNER_COLOR} )) && typeset -g ZSH_AUTOCOMPLLAMA_SPINNER_COLOR='yellow'
 # Append one line per request (time, what was typed, what came back) to this
 # file. Off by default; useful when suggestions do not show up.
 (( ! ${+ZSH_AUTOCOMPLLAMA_LOG} )) && typeset -g ZSH_AUTOCOMPLLAMA_LOG=
@@ -416,21 +421,69 @@ _zsh_autocompllama_complete() {
 # Line editor integration
 # ---------------------------------------------------------------------------
 
-# State of the in-flight background request, if any.
+# State of the in-flight background request and spinner ticker, if any.
 typeset -g _ZSH_AUTOCOMPLLAMA_FD _ZSH_AUTOCOMPLLAMA_PID _ZSH_AUTOCOMPLLAMA_PENDING \
-  _ZSH_AUTOCOMPLLAMA_LAST_BUFFER
-typeset -gi _ZSH_AUTOCOMPLLAMA_BACKOFF_UNTIL=0 _ZSH_AUTOCOMPLLAMA_WARNED=0
+  _ZSH_AUTOCOMPLLAMA_LAST_BUFFER _ZSH_AUTOCOMPLLAMA_TICK_FD _ZSH_AUTOCOMPLLAMA_TICK_PID
+typeset -gi _ZSH_AUTOCOMPLLAMA_BACKOFF_UNTIL=0 _ZSH_AUTOCOMPLLAMA_WARNED=0 \
+  _ZSH_AUTOCOMPLLAMA_FRAME=0
 
-# Show / hide the thinking indicator at the right of the prompt.
+# Kill a background process and everything it spawned (the completion child
+# runs curl in a grandchild, which would otherwise keep the server busy with
+# a request nobody wants any more).
+_zsh_autocompllama_kill_tree() {
+  local pid=$1 child
+  for child in $(pgrep -P $pid 2>/dev/null); do
+    _zsh_autocompllama_kill_tree $child
+  done
+  kill $pid 2>/dev/null
+}
+
+# Draw the current spinner frame into RPROMPT.
+_zsh_autocompllama_spinner_draw() {
+  local n=${#ZSH_AUTOCOMPLLAMA_SPINNER}
+  local frame=${ZSH_AUTOCOMPLLAMA_SPINNER[_ZSH_AUTOCOMPLLAMA_FRAME % n + 1]}
+  RPROMPT="${_ZSH_AUTOCOMPLLAMA_SAVED_RPROMPT}${_ZSH_AUTOCOMPLLAMA_SAVED_RPROMPT:+ }"
+  RPROMPT+="%F{$ZSH_AUTOCOMPLLAMA_SPINNER_COLOR}${frame}%f"
+  zle reset-prompt
+}
+
+# zle -F handler (a widget): advance the spinner one frame.
+_zsh_autocompllama_on_tick() {
+  local fd=$1 line
+  read -r -u $fd line || return 0
+  (( _ZSH_AUTOCOMPLLAMA_FRAME++ ))
+  _zsh_autocompllama_spinner_draw
+}
+
+# Show the spinner and, if it has more than one frame, start a ticker that
+# advances it until it is hidden.
 _zsh_autocompllama_spinner_show() {
   [[ -n $ZSH_AUTOCOMPLLAMA_SPINNER ]] || return 0
   (( ${+_ZSH_AUTOCOMPLLAMA_SAVED_RPROMPT} )) && return 0
   typeset -g _ZSH_AUTOCOMPLLAMA_SAVED_RPROMPT=$RPROMPT
-  RPROMPT="${RPROMPT}${RPROMPT:+ }${ZSH_AUTOCOMPLLAMA_SPINNER}"
-  zle reset-prompt
+  _ZSH_AUTOCOMPLLAMA_FRAME=0
+  _zsh_autocompllama_spinner_draw
+  if (( ${#ZSH_AUTOCOMPLLAMA_SPINNER} > 1 )); then
+    exec {_ZSH_AUTOCOMPLLAMA_TICK_FD}< <(
+      print -r -- $sysparams[pid]
+      while sleep $ZSH_AUTOCOMPLLAMA_SPINNER_INTERVAL; do print -r -- TICK || exit; done
+    )
+    read -r -u $_ZSH_AUTOCOMPLLAMA_TICK_FD _ZSH_AUTOCOMPLLAMA_TICK_PID
+    zle -F -w $_ZSH_AUTOCOMPLLAMA_TICK_FD _zsh_autocompllama_on_tick
+  fi
 }
-# With 'noredraw', only restore the variable (for when the line is finished).
+# Stop the ticker and restore RPROMPT. With 'noredraw', only restore the
+# variable (for when the line is finished).
 _zsh_autocompllama_spinner_hide() {
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_TICK_FD ]]; then
+    zle -F $_ZSH_AUTOCOMPLLAMA_TICK_FD 2>/dev/null
+    exec {_ZSH_AUTOCOMPLLAMA_TICK_FD}<&-
+    _ZSH_AUTOCOMPLLAMA_TICK_FD=
+  fi
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_TICK_PID ]]; then
+    _zsh_autocompllama_kill_tree $_ZSH_AUTOCOMPLLAMA_TICK_PID
+    _ZSH_AUTOCOMPLLAMA_TICK_PID=
+  fi
   (( ${+_ZSH_AUTOCOMPLLAMA_SAVED_RPROMPT} )) || return 0
   RPROMPT=$_ZSH_AUTOCOMPLLAMA_SAVED_RPROMPT
   unset _ZSH_AUTOCOMPLLAMA_SAVED_RPROMPT
@@ -445,7 +498,7 @@ _zsh_autocompllama_cancel() {
     _ZSH_AUTOCOMPLLAMA_FD=
   fi
   if [[ -n $_ZSH_AUTOCOMPLLAMA_PID ]]; then
-    kill $_ZSH_AUTOCOMPLLAMA_PID 2>/dev/null
+    _zsh_autocompllama_kill_tree $_ZSH_AUTOCOMPLLAMA_PID
     _ZSH_AUTOCOMPLLAMA_PID=
   fi
   _ZSH_AUTOCOMPLLAMA_PENDING=
@@ -453,14 +506,15 @@ _zsh_autocompllama_cancel() {
 }
 
 # Start a background suggestion for <partial> after the debounce period. The
-# child writes START when it begins talking to the model, then one result
-# line: OK <completion>, NONE <reason> or ERR <reason>.
+# child writes its pid, then START when it begins talking to the model, then
+# one result line: OK <completion>, NONE <reason> or ERR <reason>.
 _zsh_autocompllama_request() {
   local partial=$1
 
   _zsh_autocompllama_cancel
   _ZSH_AUTOCOMPLLAMA_PENDING=$partial
   exec {_ZSH_AUTOCOMPLLAMA_FD}< <(
+    print -r -- $sysparams[pid]
     (( ZSH_AUTOCOMPLLAMA_DEBOUNCE > 0 )) && sleep $ZSH_AUTOCOMPLLAMA_DEBOUNCE
     print -r -- START
     local out line
@@ -474,7 +528,8 @@ _zsh_autocompllama_request() {
       print -r -- "$(date '+%F %T') [$partial] $line" >> "$ZSH_AUTOCOMPLLAMA_LOG"
     print -r -- "$line"
   )
-  _ZSH_AUTOCOMPLLAMA_PID=$!
+  # $! is not set by a process substitution, so the child reports its pid.
+  read -r -u $_ZSH_AUTOCOMPLLAMA_FD _ZSH_AUTOCOMPLLAMA_PID
   zle -F -w $_ZSH_AUTOCOMPLLAMA_FD _zsh_autocompllama_on_result
 }
 
@@ -529,9 +584,10 @@ _zsh_autocompllama_on_line_finish() {
   _zsh_autocompllama_cancel noredraw
 }
 
-zmodload zsh/datetime
+zmodload zsh/datetime zsh/system
 # The fd handler is installed with 'zle -F -w', which requires a widget.
 zle -N _zsh_autocompllama_on_result
+zle -N _zsh_autocompllama_on_tick
 autoload -Uz add-zle-hook-widget
 add-zle-hook-widget zle-line-pre-redraw _zsh_autocompllama_on_change
 add-zle-hook-widget zle-line-init _zsh_autocompllama_on_line_init
