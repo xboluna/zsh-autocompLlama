@@ -22,8 +22,12 @@
 # Do not ask for buffers shorter than this.
 (( ! ${+ZSH_AUTOCOMPLLAMA_MIN_CHARS} )) && typeset -g ZSH_AUTOCOMPLLAMA_MIN_CHARS=2
 # Prompt-expanded indicator appended to RPROMPT while the model is thinking.
-# Empty disables it.
-(( ! ${+ZSH_AUTOCOMPLLAMA_SPINNER} )) && typeset -g ZSH_AUTOCOMPLLAMA_SPINNER='%F{8}…%f'
+# Yellow rather than the dim colour 8, which many terminal palettes render
+# almost invisibly. Empty disables it.
+(( ! ${+ZSH_AUTOCOMPLLAMA_SPINNER} )) && typeset -g ZSH_AUTOCOMPLLAMA_SPINNER='%F{yellow}…%f'
+# Append one line per request (time, what was typed, what came back) to this
+# file. Off by default; useful when suggestions do not show up.
+(( ! ${+ZSH_AUTOCOMPLLAMA_LOG} )) && typeset -g ZSH_AUTOCOMPLLAMA_LOG=
 # After a failed request (server down, model missing) stay quiet for this many
 # seconds instead of retrying on every pause.
 (( ! ${+ZSH_AUTOCOMPLLAMA_BACKOFF} )) && typeset -g ZSH_AUTOCOMPLLAMA_BACKOFF=30
@@ -425,13 +429,16 @@ _zsh_autocompllama_request() {
   exec {_ZSH_AUTOCOMPLLAMA_FD}< <(
     (( ZSH_AUTOCOMPLLAMA_DEBOUNCE > 0 )) && sleep $ZSH_AUTOCOMPLLAMA_DEBOUNCE
     print -r -- START
-    local out
+    local out line
     out=$(_zsh_autocompllama_complete "$partial" 2>&1)
     case $? in
-      0) print -r -- "OK $out" ;;
-      2) print -r -- "NONE $out" ;;
-      *) print -r -- "ERR $out" ;;
+      0) line="OK $out" ;;
+      2) line="NONE $out" ;;
+      *) line="ERR $out" ;;
     esac
+    [[ -n $ZSH_AUTOCOMPLLAMA_LOG ]] &&
+      print -r -- "$(date '+%F %T') [$partial] $line" >> "$ZSH_AUTOCOMPLLAMA_LOG"
+    print -r -- "$line"
   )
   _ZSH_AUTOCOMPLLAMA_PID=$!
   zle -F -w $_ZSH_AUTOCOMPLLAMA_FD _zsh_autocompllama_on_result

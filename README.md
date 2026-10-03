@@ -72,7 +72,12 @@ Without oh-my-zsh, source the file from `~/.zshrc`:
 source /path/to/zsh-autocompLlama/zsh-autocompllama.plugin.zsh
 ```
 
-If nothing shows up, run `zsh_autocompllama_check` to see what is missing.
+If nothing shows up, run `zsh_autocompllama_check` to see what is missing, and
+set `ZSH_AUTOCOMPLLAMA_LOG=~/.cache/zsh-autocompllama.log` to see what the
+model answered for what you typed. The grey suggestion text is drawn by
+zsh-autosuggestions in `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE` (default `fg=8`);
+some terminal palettes make that colour nearly invisible, in which case
+`ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=244'` is a safe mid-grey.
 
 ## Configuration
 
@@ -84,7 +89,8 @@ Set any of these in `~/.zshrc` before the plugin loads.
 | `ZSH_OLLAMA_URL` | `http://localhost:11434` | ollama server. |
 | `ZSH_AUTOCOMPLLAMA_DEBOUNCE` | `0.3` | Seconds of typing pause before the model is asked. |
 | `ZSH_AUTOCOMPLLAMA_MIN_CHARS` | `2` | Do not ask for shorter buffers. |
-| `ZSH_AUTOCOMPLLAMA_SPINNER` | `%F{8}…%f` | Prompt-expanded indicator appended to `RPROMPT` while thinking. Empty disables. |
+| `ZSH_AUTOCOMPLLAMA_SPINNER` | `%F{yellow}…%f` | Prompt-expanded indicator appended to `RPROMPT` while thinking. Empty disables. |
+| `ZSH_AUTOCOMPLLAMA_LOG` | empty | File to append one line per request to (time, typed text, result). Handy when nothing shows up. |
 | `ZSH_AUTOCOMPLLAMA_BACKOFF` | `30` | Seconds to pause automatic suggestions after a failed request. |
 | `ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES` | `10` | History candidates offered to the model. `0` skips straight to generation. |
 | `ZSH_AUTOCOMPLLAMA_GENERATE` | `1` | Allow writing a command from scratch when no candidate fits. `0` only ever suggests commands you have run before. |
