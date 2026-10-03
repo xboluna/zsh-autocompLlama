@@ -1,9 +1,19 @@
-# Default ollama model as llama3.
-(( ! ${+ZSH_OLLAMA_MODEL} )) && typeset -g ZSH_OLLAMA_MODEL='llama3'
+# Default ollama model. A ~0.5B coder model answers in well under a second
+# on Apple Silicon and uses ~0.5 GB of memory; bump to qwen2.5-coder:1.5b if
+# suggestions are too dumb.
+(( ! ${+ZSH_OLLAMA_MODEL} )) && typeset -g ZSH_OLLAMA_MODEL='qwen2.5-coder:0.5b'
 # Default ollama server host.
 (( ! ${+ZSH_OLLAMA_URL} )) && typeset -g ZSH_OLLAMA_URL='http://localhost:11434'
 # Key that triggers a completion (ctrl-o by default).
 (( ! ${+ZSH_AUTOCOMPLLAMA_HOTKEY} )) && typeset -g ZSH_AUTOCOMPLLAMA_HOTKEY='^o'
+# How long ollama keeps the model loaded after a request. -1 keeps it resident
+# so a completion never pays the multi-second model load; set e.g. '5m' to
+# release memory when idle.
+(( ! ${+ZSH_AUTOCOMPLLAMA_KEEP_ALIVE} )) && typeset -g ZSH_AUTOCOMPLLAMA_KEEP_ALIVE=-1
+# Context window and output cap. Commands are short; a small context keeps the
+# KV cache small and the output cap bounds latency on a rambling model.
+(( ! ${+ZSH_AUTOCOMPLLAMA_NUM_CTX} )) && typeset -g ZSH_AUTOCOMPLLAMA_NUM_CTX=2048
+(( ! ${+ZSH_AUTOCOMPLLAMA_NUM_PREDICT} )) && typeset -g ZSH_AUTOCOMPLLAMA_NUM_PREDICT=64
 
 validate_required() {
   # Check that required tools are installed and the ollama server is reachable.
@@ -56,6 +66,9 @@ If the task needs more than one command, combine them into one line."
     --arg model "$ZSH_OLLAMA_MODEL" \
     --arg system "$system_prompt" \
     --arg prompt "$BUFFER" \
+    --arg keep_alive "$ZSH_AUTOCOMPLLAMA_KEEP_ALIVE" \
+    --argjson num_ctx "$ZSH_AUTOCOMPLLAMA_NUM_CTX" \
+    --argjson num_predict "$ZSH_AUTOCOMPLLAMA_NUM_PREDICT" \
     '{
       model: $model,
       messages: [
@@ -63,7 +76,13 @@ If the task needs more than one command, combine them into one line."
         {role: "user", content: $prompt}
       ],
       stream: false,
-      options: {temperature: 0}
+      keep_alive: ($keep_alive | tonumber? // $keep_alive),
+      options: {
+        temperature: 0,
+        num_ctx: $num_ctx,
+        num_predict: $num_predict,
+        stop: ["\n"]
+      }
     }')
 
   local response
