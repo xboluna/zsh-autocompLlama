@@ -248,17 +248,23 @@ _zsh_autocompllama_post() {
   # (not 'path': that name is tied to $PATH in zsh)
   local endpoint=$1 request_body=$2
 
-  local response
-  if ! response=$(curl --silent --show-error --fail --connect-timeout 2 \
+  # --fail-with-body keeps ollama's JSON error on HTTP 4xx/5xx so the reason
+  # can be reported (and reacted to) instead of a bare status code.
+  local response err
+  if ! response=$(curl --silent --show-error --fail-with-body --connect-timeout 2 \
       "${ZSH_OLLAMA_URL}${endpoint}" \
       -H "Content-Type: application/json" \
       -d "$request_body" 2>&1); then
-    print -u2 -r -- "zsh-autocompllama: request failed: $response"
+    err=$(printf '%s\n' "$response" | grep -o '{.*}' | jq -r '.error // empty' 2>/dev/null)
+    if [[ -n $err ]]; then
+      print -u2 -r -- "zsh-autocompllama: ollama error: $err"
+    else
+      print -u2 -r -- "zsh-autocompllama: request failed: $response"
+    fi
     return 1
   fi
 
-  local err
-  err=$(printf '%s' "$response" | jq -r '.error // empty')
+  err=$(printf '%s' "$response" | jq -r '.error // empty' 2>/dev/null)
   if [[ -n $err ]]; then
     print -u2 -r -- "zsh-autocompllama: ollama error: $err"
     return 1
@@ -290,21 +296,35 @@ _zsh_autocompllama_chat() {
   _zsh_autocompllama_post /api/chat "$request_body" | jq -r '.message.content // empty'
 }
 
-# Ask ollama to continue a raw prompt, stopping at the end of the line, and
-# print only the continuation. No chat template is applied, so the model is
-# completing text rather than answering a question: it can only ever produce
-# new characters after the prompt, never a rewrite of it.
-# Usage: _zsh_autocompllama_continue <prompt>
+# Ask ollama for the text that belongs between a prefix and a suffix, and
+# print it. This is fill-in-the-middle: code models such as qwen2.5-coder
+# are trained for it, and with the suffix being the next prompt line the
+# model has to finish the partial command rather than end the line. The
+# model is completing text, not answering a question, so it can only ever
+# produce new characters after the prefix, never a rewrite of it.
+# Models without a fill-in-the-middle template get a plain raw continuation
+# of the prefix instead.
+# Usage: _zsh_autocompllama_continue <prefix> <suffix>
 _zsh_autocompllama_continue() {
-  setopt localoptions pipefail
-  local prompt=$1
+  setopt localoptions pipefail extendedglob
+  local prefix=$1 suffix=$2
 
-  local request_body
+  local request_body response
   request_body=$(_zsh_autocompllama_request_base | jq \
-    --arg prompt "$prompt" \
-    '. + {prompt: $prompt, raw: true} | .options.stop = ["\n"]')
+    --arg prompt "$prefix" --arg suffix "$suffix" \
+    '. + {prompt: $prompt, suffix: $suffix} | .options.stop = ["\n"]')
+  if ! response=$(_zsh_autocompllama_post /api/generate "$request_body" 2>&1); then
+    if [[ $response != *(suffix|insert)* ]]; then
+      print -u2 -r -- "$response"
+      return 1
+    fi
+    request_body=$(_zsh_autocompllama_request_base | jq \
+      --arg prompt "$prefix" \
+      '. + {prompt: $prompt, raw: true} | .options.stop = ["\n"]')
+    response=$(_zsh_autocompllama_post /api/generate "$request_body") || return 1
+  fi
 
-  _zsh_autocompllama_post /api/generate "$request_body" | jq -r '.response // empty'
+  printf '%s' "$response" | jq -r '.response // empty'
 }
 
 # Ask the model to choose among candidate commands. Prints the chosen command,
@@ -399,11 +419,12 @@ _zsh_autocompllama_complete() {
     return 2
   fi
 
-  # The prompt is a session transcript ending with the partial command, so the
-  # model's reply is purely the characters that follow it.
-  local prompt continuation
-  prompt="$(_zsh_autocompllama_transcript)"$'\n'"\$ $partial"
-  continuation=$(_zsh_autocompllama_continue "$prompt") || return 1
+  # The prefix is a session transcript ending with the partial command and the
+  # suffix is the next prompt line, so the model's reply is purely the
+  # characters that finish this command.
+  local prefix continuation
+  prefix="$(_zsh_autocompllama_transcript)"$'\n'"\$ $partial"
+  continuation=$(_zsh_autocompllama_continue "$prefix" $'\n$ ') || return 1
   continuation=${continuation%%[[:space:]]#}
   if [[ -z $continuation ]]; then
     print -u2 -r -- "zsh-autocompllama: no completion from ${ZSH_OLLAMA_MODEL}"
