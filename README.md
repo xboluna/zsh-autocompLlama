@@ -38,14 +38,14 @@ retrying on every keystroke.
 - [ollama](https://ollama.com) running locally with a code model pulled, one
   with a fill-in-the-middle template (qwen2.5-coder, codellama, deepseek-coder,
   starcoder2, codegemma). Other models work, with plainer continuations. The default
-  is `qwen2.5-coder:0.5b`: ~0.5 GB resident, a few hundred milliseconds per
-  completion on Apple Silicon. `qwen2.5-coder:1.5b` is noticeably smarter for
-  ~1 GB.
+  is `qwen2.5-coder:3b`: ~2 GB resident, a few hundred milliseconds per
+  completion on Apple Silicon. `qwen2.5-coder:1.5b` and `0.5b` shrink the
+  footprint at some cost in judgement.
 
   ```sh
   brew install ollama jq        # or your package manager
   brew services start ollama    # or: ollama serve
-  ollama pull qwen2.5-coder:0.5b
+  ollama pull qwen2.5-coder:3b
   ```
 
 - Optional: [zsh-histdb](https://github.com/larkery/zsh-histdb). With it loaded,
@@ -91,7 +91,7 @@ Set any of these in `~/.zshrc` before the plugin loads.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `ZSH_OLLAMA_MODEL` | `qwen2.5-coder:0.5b` | Model to use. |
+| `ZSH_OLLAMA_MODEL` | `qwen2.5-coder:3b` | Model to use. |
 | `ZSH_OLLAMA_URL` | `http://localhost:11434` | ollama server. |
 | `ZSH_AUTOCOMPLLAMA_DEBOUNCE` | `0.15` | Seconds of typing pause before the model is asked. |
 | `ZSH_AUTOCOMPLLAMA_MIN_CHARS` | `2` | Do not ask for shorter buffers. |
