@@ -21,7 +21,7 @@
 
 typeset -g _ZSH_AUTOCOMPLLAMA_OS=$(uname -s)
 
-validate_required() {
+_zsh_autocompllama_validate_required() {
   # Check that required tools are installed and the ollama server is reachable.
   if (( ! $+commands[jq] )); then
     echo "🚨: zsh-autocompllama failed as jq NOT found!"
@@ -101,28 +101,14 @@ _zsh_autocompllama_context() {
   fi
 }
 
-# ZLE widget: replace the current line with a completion suggested by ollama.
-zsh_autocompllama() {
-  setopt localoptions extendedglob
-  local err
-  if ! err=$(validate_required 2>&1); then
-    zle -M "$err"
-    return 1
-  fi
-  [[ -n $BUFFER ]] || return 0
+# Send one chat request to ollama and print the assistant's reply.
+# Usage: _zsh_autocompllama_chat <system prompt> <user prompt> [<format JSON>]
+# With a format (a JSON schema) the reply is constrained to match it. Without
+# one, generation stops at the first newline since a command is a single line.
+# Errors go to stderr with a non-zero return.
+_zsh_autocompllama_chat() {
+  local system_prompt=$1 user_prompt=$2 format=${3:-'""'}
 
-  local system_prompt="You are a shell command completion engine. \
-The user message describes the machine, the working directory, its files and the commands \
-the user recently ran there, followed by a partial terminal command after 'Partial command:'. \
-Reply with the single completed command only: no explanation, no markdown, no code fences, \
-no surrounding quotes, no newlines. Keep the characters the user already typed unchanged and \
-only append to them. Prefer file names and commands that appear in the context over invented \
-ones. If the task needs more than one command, combine them into one line."
-
-  local user_prompt
-  user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Partial command: $BUFFER"
-
-  # Build the request with jq so the buffer is JSON-escaped correctly.
   local request_body
   request_body=$(jq -n \
     --arg model "$ZSH_OLLAMA_MODEL" \
@@ -131,6 +117,7 @@ ones. If the task needs more than one command, combine them into one line."
     --arg keep_alive "$ZSH_AUTOCOMPLLAMA_KEEP_ALIVE" \
     --argjson num_ctx "$ZSH_AUTOCOMPLLAMA_NUM_CTX" \
     --argjson num_predict "$ZSH_AUTOCOMPLLAMA_NUM_PREDICT" \
+    --argjson format "$format" \
     '{
       model: $model,
       messages: [
@@ -142,37 +129,82 @@ ones. If the task needs more than one command, combine them into one line."
       options: {
         temperature: 0,
         num_ctx: $num_ctx,
-        num_predict: $num_predict,
-        stop: ["\n"]
+        num_predict: $num_predict
       }
-    }')
+    }
+    | if $format == "" then .options.stop = ["\n"] else .format = $format end')
 
   local response
   if ! response=$(curl --silent --show-error --fail "${ZSH_OLLAMA_URL}/api/chat" \
       -H "Content-Type: application/json" \
       -d "$request_body" 2>&1); then
-    zle -M "zsh-autocompllama: request failed: $response"
+    print -u2 -r -- "zsh-autocompllama: request failed: $response"
     return 1
   fi
 
+  local err
   err=$(printf '%s' "$response" | jq -r '.error // empty')
   if [[ -n $err ]]; then
-    zle -M "zsh-autocompllama: ollama error: $err"
+    print -u2 -r -- "zsh-autocompllama: ollama error: $err"
     return 1
   fi
+
+  printf '%s' "$response" | jq -r '.message.content // empty'
+}
+
+# Strip the markdown fences, backticks and surrounding whitespace that models
+# add despite instructions, and print what is left.
+_zsh_autocompllama_clean() {
+  setopt localoptions extendedglob
+  local text
+  text=$(printf '%s' "$1" | sed -E -e '/^[[:space:]]*```/d' -e 's/^`(.*)`$/\1/')
+  text=${text##[[:space:]]#}
+  text=${text%%[[:space:]]#}
+  print -r -- "$text"
+}
+
+# Compute a completion for a partial command and print it. Pure with respect
+# to the line editor so it can run outside ZLE (tests, background jobs).
+# Errors go to stderr with a non-zero return.
+_zsh_autocompllama_complete() {
+  local partial=$1
+
+  local system_prompt="You are a shell command completion engine. \
+The user message describes the machine, the working directory, its files and the commands \
+the user recently ran there, followed by a partial terminal command after 'Partial command:'. \
+Reply with the single completed command only: no explanation, no markdown, no code fences, \
+no surrounding quotes, no newlines. Keep the characters the user already typed unchanged and \
+only append to them. Prefer file names and commands that appear in the context over invented \
+ones. If the task needs more than one command, combine them into one line."
+
+  local user_prompt
+  user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Partial command: $partial"
 
   local completion
-  completion=$(printf '%s' "$response" | jq -r '.message.content // empty')
-  # Models often wrap the answer in a code fence or backticks despite being told not to.
-  completion=$(printf '%s' "$completion" | sed -E -e '/^[[:space:]]*```/d' -e 's/^`(.*)`$/\1/')
-  completion=${completion##[[:space:]]#}
-  completion=${completion%%[[:space:]]#}
+  completion=$(_zsh_autocompllama_chat "$system_prompt" "$user_prompt") || return 1
+  completion=$(_zsh_autocompllama_clean "$completion")
   if [[ -z $completion ]]; then
-    zle -M "zsh-autocompllama: empty completion from ${ZSH_OLLAMA_MODEL}"
+    print -u2 -r -- "zsh-autocompllama: empty completion from ${ZSH_OLLAMA_MODEL}"
+    return 1
+  fi
+  print -r -- "$completion"
+}
+
+# ZLE widget: replace the current line with a completion suggested by ollama.
+zsh_autocompllama() {
+  [[ -n $BUFFER ]] || return 0
+
+  local result
+  if ! result=$(_zsh_autocompllama_validate_required 2>&1); then
+    zle -M "$result"
+    return 1
+  fi
+  if ! result=$(_zsh_autocompllama_complete "$BUFFER" 2>&1); then
+    zle -M "$result"
     return 1
   fi
 
-  BUFFER=$completion
+  BUFFER=$result
   CURSOR=$#BUFFER
   zle redisplay
 }
