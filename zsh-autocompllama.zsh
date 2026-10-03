@@ -36,6 +36,7 @@ validate_required() {
 
 # ZLE widget: replace the current line with a completion suggested by ollama.
 zsh_autocompllama() {
+  setopt localoptions extendedglob
   local err
   if ! err=$(validate_required 2>&1); then
     zle -M "$err"
@@ -43,44 +44,54 @@ zsh_autocompllama() {
   fi
   [[ -n $BUFFER ]] || return 0
 
-  # Construct command.
-  local ZSH_OLLAMA_COMMANDS_USER_QUERY=$BUFFER
+  local system_prompt="You are a shell command completion engine for Linux and macOS. \
+The user gives you a partial terminal command. Reply with the single completed command only: \
+no explanation, no markdown, no code fences, no surrounding quotes, no newlines. \
+Keep the characters the user already typed unchanged and only append to them. \
+If the task needs more than one command, combine them into one line."
 
-  local ZSH_OLLAMA_COMMANDS_MESSAGE_CONTENT="
-    Provide a single Linux/MacOS terminal command according to the following instructions:
-    '$ZSH_OLLAMA_COMMANDS_USER_QUERY'
+  # Build the request with jq so the buffer is JSON-escaped correctly.
+  local request_body
+  request_body=$(jq -n \
+    --arg model "$ZSH_OLLAMA_MODEL" \
+    --arg system "$system_prompt" \
+    --arg prompt "$BUFFER" \
+    '{
+      model: $model,
+      messages: [
+        {role: "system", content: $system},
+        {role: "user", content: $prompt}
+      ],
+      stream: false,
+      options: {temperature: 0}
+    }')
 
-    Return without newlines and consisting only of a single suggested command. 
-    No additional description. No additional text should be present. 
-    If the task requires more than one command, combine them into a single command.
-    The command should be completion only. Do not change any of the characters in the provided prompt.
-  "
+  local response
+  if ! response=$(curl --silent --show-error --fail "${ZSH_OLLAMA_URL}/api/chat" \
+      -H "Content-Type: application/json" \
+      -d "$request_body" 2>&1); then
+    zle -M "zsh-autocompllama: request failed: $response"
+    return 1
+  fi
 
-  # TODO: See if this works.
-  # The command should complete the provided command, however typos and brackets may be corrected, as necessary.
+  err=$(printf '%s' "$response" | jq -r '.error // empty')
+  if [[ -n $err ]]; then
+    zle -M "zsh-autocompllama: ollama error: $err"
+    return 1
+  fi
 
-  # Replace all newlines with commas.
-  local ZSH_OLLAMA_COMMANDS_MESSAGE_CONTENT=$(echo "$ZSH_OLLAMA_COMMANDS_MESSAGE_CONTENT" | tr '\n' ',')
+  local completion
+  completion=$(printf '%s' "$response" | jq -r '.message.content // empty')
+  # Models often wrap the answer in a code fence or backticks despite being told not to.
+  completion=$(printf '%s' "$completion" | sed -E -e '/^[[:space:]]*```/d' -e 's/^`(.*)`$/\1/')
+  completion=${completion##[[:space:]]#}
+  completion=${completion%%[[:space:]]#}
+  if [[ -z $completion ]]; then
+    zle -M "zsh-autocompllama: empty completion from ${ZSH_OLLAMA_MODEL}"
+    return 1
+  fi
 
-  # Create request.
-  local ZSH_OLLAMA_COMMANDS_REQUEST_BODY='{
-    "model": "'$ZSH_OLLAMA_MODEL'",
-    "messages": [
-      {
-        "role": "user",
-        "content":  "'$ZSH_OLLAMA_COMMANDS_MESSAGE_CONTENT'"
-      }
-    ],
-    "stream": false
-  }'
-
-  # Query ollama.
-  local ZSH_OLLAMA_COMMAND_RESPONSE=$(curl --silent "${ZSH_OLLAMA_URL}/api/chat" \
-    -H "Content-Type: application/json" \
-    -d "$ZSH_OLLAMA_COMMANDS_REQUEST_BODY")
-  
-  # Parse response.
-  BUFFER=$(echo $ZSH_OLLAMA_COMMAND_RESPONSE | jq -r '.message."content"')
+  BUFFER=$completion
   CURSOR=$#BUFFER
   zle redisplay
 }
