@@ -18,6 +18,13 @@
 # listing and recent commands run in this directory tree. 0 disables either.
 (( ! ${+ZSH_AUTOCOMPLLAMA_MAX_FILES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_FILES=30
 (( ! ${+ZSH_AUTOCOMPLLAMA_MAX_HISTORY} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_HISTORY=10
+# Up to this many history commands matching the partial command are offered to
+# the model as candidates; it must pick one of them (or none), so this path
+# cannot invent a command. 0 disables it.
+(( ! ${+ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES=10
+# When no history candidate fits, let the model write a command from scratch.
+# Set to 0 to only ever suggest commands you have run before.
+(( ! ${+ZSH_AUTOCOMPLLAMA_GENERATE} )) && typeset -g ZSH_AUTOCOMPLLAMA_GENERATE=1
 
 typeset -g _ZSH_AUTOCOMPLLAMA_OS=$(uname -s)
 
@@ -75,6 +82,93 @@ _zsh_autocompllama_recent_commands() {
     lines=( ${(f)"$(fc -ln -$limit 2>/dev/null || fc -ln 1 2>/dev/null)"} )
     print -rl -- ${${(Oa)lines}[1,limit]}
   fi
+}
+
+# History commands that could complete the partial command, best first, one per
+# line. Prefix matches rank above substring matches, commands run in this
+# directory tree above others, then by frequency. With zsh-histdb loaded the
+# ranking uses its database; otherwise plain shell history, most recent first.
+_zsh_autocompllama_candidates() {
+  local partial=$1 limit=$2
+  (( limit > 0 )) || return 0
+  if (( $+functions[_histdb_query] )); then
+    local p=$(sql_escape "$partial") d=$(sql_escape "$PWD")
+    _histdb_query "
+      select commands.argv
+      from history
+      left join commands on history.command_id = commands.rowid
+      left join places on history.place_id = places.rowid
+      where commands.argv like '%$p%'
+        and commands.argv != '$p'
+        and instr(commands.argv, char(10)) = 0
+      group by commands.argv
+      order by
+        max(commands.argv like '$p%') desc,
+        max(places.dir = '$d') desc,
+        max(places.dir like '$d%') desc,
+        count(*) desc,
+        max(history.start_time) desc
+      limit $limit"
+  else
+    local -a lines
+    lines=( ${(f)"$(fc -ln 1 2>/dev/null)"} )
+    lines=( ${(u)${(Oa)lines}} )
+    lines=( ${(M)lines:#${partial}?*} ${(M)lines:#?*${partial}*} )
+    print -rl -- ${${(u)lines}[1,limit]}
+  fi
+}
+
+# Ask the model to choose among candidate commands. Prints the chosen command,
+# or nothing if the model answers NONE. The reply is constrained with a JSON
+# schema whose only allowed values are the candidates, so it cannot be
+# anything else. Usage: _zsh_autocompllama_pick <partial> <candidate>...
+_zsh_autocompllama_pick() {
+  local partial=$1; shift
+  local -a candidates; candidates=( "$@" )
+
+  local schema
+  schema=$(print -rl -- "${candidates[@]}" NONE | jq -Rs '
+    split("\n")[:-1]
+    | {type: "object", properties: {cmd: {type: "string", enum: .}}, required: ["cmd"]}')
+
+  local system_prompt="You are a shell command completion engine. \
+The user message describes the machine, the working directory, its files and the commands \
+the user recently ran there, then lists candidate commands from the user's history, then \
+gives a partial terminal command after 'Partial command:'. Choose the candidate that best \
+completes what the user is typing. Answer NONE if no candidate fits."
+
+  local user_prompt
+  user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Candidates:"$'\n'
+  local i
+  for (( i = 1; i <= $#candidates; i++ )); do
+    user_prompt+="$i. ${candidates[i]}"$'\n'
+  done
+  user_prompt+=$'\n'"Partial command: $partial"
+
+  local reply choice
+  reply=$(_zsh_autocompllama_chat "$system_prompt" "$user_prompt" "$schema") || return 1
+  choice=$(printf '%s' "$reply" | jq -r '.cmd // empty' 2>/dev/null)
+  [[ $choice == NONE ]] && return 0
+  # Belt and braces: only ever return something that really was a candidate.
+  (( ${candidates[(Ie)$choice]} )) && print -r -- "$choice"
+}
+
+# Does the command start with something that can actually run here? Skips
+# leading VAR=value assignments and common wrappers, then checks the first
+# word resolves to a command, builtin, function, alias or executable path.
+# Compound commands (starting with a brace, paren or '!') are accepted as is.
+_zsh_autocompllama_valid_command() {
+  local -a words; words=( ${(z)1} )
+  local w
+  for w in "${words[@]}"; do
+    case $w in
+      *=*) continue ;;
+      sudo|env|time|nohup|command|exec|builtin|nice|noglob) continue ;;
+      '{'|'('|'!'|'{'*|'('*|'!'*) return 0 ;;
+      *) whence -w -- "$w" >/dev/null 2>&1; return ;;
+    esac
+  done
+  return 1
 }
 
 # Context block sent ahead of the partial command. It describes the machine,
@@ -168,6 +262,24 @@ _zsh_autocompllama_clean() {
 # Errors go to stderr with a non-zero return.
 _zsh_autocompllama_complete() {
   local partial=$1
+  local completion
+
+  # First choice: pick from commands the user has actually run.
+  local -a candidates
+  candidates=( ${(f)"$(_zsh_autocompllama_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES)"} )
+  if (( $#candidates )); then
+    completion=$(_zsh_autocompllama_pick "$partial" "${candidates[@]}") || return 1
+    if [[ -n $completion ]]; then
+      print -r -- "$completion"
+      return 0
+    fi
+  fi
+
+  # Fallback: let the model write the command, then sanity-check it.
+  if (( ! ZSH_AUTOCOMPLLAMA_GENERATE )); then
+    print -u2 -r -- "zsh-autocompllama: no matching command in history"
+    return 1
+  fi
 
   local system_prompt="You are a shell command completion engine. \
 The user message describes the machine, the working directory, its files and the commands \
@@ -180,11 +292,14 @@ ones. If the task needs more than one command, combine them into one line."
   local user_prompt
   user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Partial command: $partial"
 
-  local completion
   completion=$(_zsh_autocompllama_chat "$system_prompt" "$user_prompt") || return 1
   completion=$(_zsh_autocompllama_clean "$completion")
-  if [[ -z $completion ]]; then
-    print -u2 -r -- "zsh-autocompllama: empty completion from ${ZSH_OLLAMA_MODEL}"
+  if [[ -z $completion || $completion == $partial ]]; then
+    print -u2 -r -- "zsh-autocompllama: no completion from ${ZSH_OLLAMA_MODEL}"
+    return 1
+  fi
+  if ! _zsh_autocompllama_valid_command "$completion"; then
+    print -u2 -r -- "zsh-autocompllama: rejected suggestion (unknown command): $completion"
     return 1
   fi
   print -r -- "$completion"
