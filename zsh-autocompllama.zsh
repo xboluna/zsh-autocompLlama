@@ -10,10 +10,11 @@
 # Configuration. Set any of these in ~/.zshrc before the plugin loads.
 # ---------------------------------------------------------------------------
 
-# ollama model. A ~0.5B coder model answers in well under a second on Apple
-# Silicon and uses ~0.5 GB of memory; bump to qwen2.5-coder:1.5b if suggestions
-# are too dumb.
-(( ! ${+ZSH_OLLAMA_MODEL} )) && typeset -g ZSH_OLLAMA_MODEL='qwen2.5-coder:0.5b'
+# ollama model. The 3B coder model answers in a few hundred ms on Apple
+# Silicon with ~2 GB resident and is the first size whose fill-ins are
+# reliably sensible; qwen2.5-coder:1.5b (~1 GB) or 0.5b (~0.5 GB) trade
+# judgement for footprint.
+(( ! ${+ZSH_OLLAMA_MODEL} )) && typeset -g ZSH_OLLAMA_MODEL='qwen2.5-coder:3b'
 # ollama server.
 (( ! ${+ZSH_OLLAMA_URL} )) && typeset -g ZSH_OLLAMA_URL='http://localhost:11434'
 
