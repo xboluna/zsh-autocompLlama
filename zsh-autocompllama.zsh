@@ -6,6 +6,9 @@
 (( ! ${+ZSH_OLLAMA_URL} )) && typeset -g ZSH_OLLAMA_URL='http://localhost:11434'
 # Key that triggers a completion (ctrl-o by default).
 (( ! ${+ZSH_AUTOCOMPLLAMA_HOTKEY} )) && typeset -g ZSH_AUTOCOMPLLAMA_HOTKEY='^o'
+# Run the request in the background so the shell stays responsive while the
+# model thinks; the line is replaced when the answer arrives. Set to 0 to block.
+(( ! ${+ZSH_AUTOCOMPLLAMA_ASYNC} )) && typeset -g ZSH_AUTOCOMPLLAMA_ASYNC=1
 # How long ollama keeps the model loaded after a request. -1 keeps it resident
 # so a completion never pays the multi-second model load; set e.g. '5m' to
 # release memory when idle.
@@ -305,6 +308,49 @@ ones. If the task needs more than one command, combine them into one line."
   print -r -- "$completion"
 }
 
+# State of the in-flight background request, if any.
+typeset -g _ZSH_AUTOCOMPLLAMA_FD _ZSH_AUTOCOMPLLAMA_PID _ZSH_AUTOCOMPLLAMA_PENDING
+
+# Apply a finished completion to the line editor.
+_zsh_autocompllama_apply() {
+  BUFFER=$1
+  CURSOR=$#BUFFER
+  zle -M ""
+  zle -R
+}
+
+# Drop any background request that is still running.
+_zsh_autocompllama_cancel() {
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_FD ]]; then
+    zle -F $_ZSH_AUTOCOMPLLAMA_FD 2>/dev/null
+    exec {_ZSH_AUTOCOMPLLAMA_FD}<&-
+    _ZSH_AUTOCOMPLLAMA_FD=
+  fi
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_PID ]]; then
+    kill $_ZSH_AUTOCOMPLLAMA_PID 2>/dev/null
+    _ZSH_AUTOCOMPLLAMA_PID=
+  fi
+  _ZSH_AUTOCOMPLLAMA_PENDING=
+}
+
+# zle -F handler: the background request has written its result.
+_zsh_autocompllama_on_result() {
+  local fd=$1 flags=$2
+  local line
+  [[ -n $flags ]] || line=$(<&$fd)
+  local pending=$_ZSH_AUTOCOMPLLAMA_PENDING
+  _zsh_autocompllama_cancel
+
+  # The user kept editing while the model was thinking: the answer is stale.
+  [[ $BUFFER == $pending ]] || return 0
+
+  case $line in
+    OK\ *)  _zsh_autocompllama_apply "${line#OK }" ;;
+    ERR\ *) zle -M "${line#ERR }" ;;
+    *)      zle -M "zsh-autocompllama: no result" ;;
+  esac
+}
+
 # ZLE widget: replace the current line with a completion suggested by ollama.
 zsh_autocompllama() {
   [[ -n $BUFFER ]] || return 0
@@ -314,17 +360,36 @@ zsh_autocompllama() {
     zle -M "$result"
     return 1
   fi
-  if ! result=$(_zsh_autocompllama_complete "$BUFFER" 2>&1); then
-    zle -M "$result"
-    return 1
+
+  if (( ! ZSH_AUTOCOMPLLAMA_ASYNC )); then
+    if ! result=$(_zsh_autocompllama_complete "$BUFFER" 2>&1); then
+      zle -M "$result"
+      return 1
+    fi
+    _zsh_autocompllama_apply "$result"
+    return 0
   fi
 
-  BUFFER=$result
-  CURSOR=$#BUFFER
-  zle redisplay
+  # Fork the completion into the background and read its one-line result
+  # through a file descriptor that zle watches between keystrokes.
+  _zsh_autocompllama_cancel
+  _ZSH_AUTOCOMPLLAMA_PENDING=$BUFFER
+  exec {_ZSH_AUTOCOMPLLAMA_FD}< <(
+    local out
+    if out=$(_zsh_autocompllama_complete "$BUFFER" 2>&1); then
+      print -r -- "OK $out"
+    else
+      print -r -- "ERR $out"
+    fi
+  )
+  _ZSH_AUTOCOMPLLAMA_PID=$!
+  zle -F -w $_ZSH_AUTOCOMPLLAMA_FD _zsh_autocompllama_on_result
+  zle -M "zsh-autocompllama: thinking..."
 }
 
 zle -N zsh_autocompllama
+# The fd handler is installed with 'zle -F -w', which requires a widget.
+zle -N _zsh_autocompllama_on_result
 bindkey "$ZSH_AUTOCOMPLLAMA_HOTKEY" zsh_autocompllama
 # zsh-vi-mode rebuilds the keymaps after init, discarding bindings made by
 # other plugins, so re-bind afterwards when it is loaded.
