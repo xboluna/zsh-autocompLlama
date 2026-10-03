@@ -5,8 +5,8 @@ command history and the directory you are in.
 
 As you type, [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions)
 shows the best matching command from your history instantly as grey text. When
-you pause, a small `…` appears at the right of the prompt while a local model
-looks at your history and directory, and its pick replaces the grey text.
+you pause, a spinner at the right of the prompt shows a local model looking at
+your history and directory, and its pick replaces the grey text.
 Accept it with → as usual, or keep typing and it gets out of the way. Nothing
 you typed is ever changed. The model is never allowed to just make something
 up:
@@ -89,9 +89,11 @@ Set any of these in `~/.zshrc` before the plugin loads.
 | --- | --- | --- |
 | `ZSH_OLLAMA_MODEL` | `qwen2.5-coder:0.5b` | Model to use. |
 | `ZSH_OLLAMA_URL` | `http://localhost:11434` | ollama server. |
-| `ZSH_AUTOCOMPLLAMA_DEBOUNCE` | `0.3` | Seconds of typing pause before the model is asked. |
+| `ZSH_AUTOCOMPLLAMA_DEBOUNCE` | `0.15` | Seconds of typing pause before the model is asked. |
 | `ZSH_AUTOCOMPLLAMA_MIN_CHARS` | `2` | Do not ask for shorter buffers. |
-| `ZSH_AUTOCOMPLLAMA_SPINNER` | `%F{yellow}…%f` | Prompt-expanded indicator appended to `RPROMPT` while thinking. Empty disables. |
+| `ZSH_AUTOCOMPLLAMA_SPINNER` | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | Spinner frames (one character each) shown at the right of the prompt while thinking. One character makes it static; empty disables. |
+| `ZSH_AUTOCOMPLLAMA_SPINNER_INTERVAL` | `0.08` | Seconds per spinner frame. |
+| `ZSH_AUTOCOMPLLAMA_SPINNER_COLOR` | `yellow` | Prompt colour of the spinner. |
 | `ZSH_AUTOCOMPLLAMA_LOG` | empty | File to append one line per request to (time, typed text, result). Handy when nothing shows up. |
 | `ZSH_AUTOCOMPLLAMA_BACKOFF` | `30` | Seconds to pause automatic suggestions after a failed request. |
 | `ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES` | `10` | History candidates offered to the model. `0` skips straight to generation. |
