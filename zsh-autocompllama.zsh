@@ -87,3 +87,8 @@ zsh_autocompllama() {
 
 zle -N zsh_autocompllama
 bindkey "$ZSH_AUTOCOMPLLAMA_HOTKEY" zsh_autocompllama
+# zsh-vi-mode rebuilds the keymaps after init, discarding bindings made by
+# other plugins, so re-bind afterwards when it is loaded.
+if (( ${+zvm_after_init_commands} )); then
+  zvm_after_init_commands+=("bindkey '$ZSH_AUTOCOMPLLAMA_HOTKEY' zsh_autocompllama")
+fi
