@@ -2,6 +2,8 @@
 (( ! ${+ZSH_OLLAMA_MODEL} )) && typeset -g ZSH_OLLAMA_MODEL='llama3'
 # Default ollama server host.
 (( ! ${+ZSH_OLLAMA_URL} )) && typeset -g ZSH_OLLAMA_URL='http://localhost:11434'
+# Key that triggers a completion (ctrl-o by default).
+(( ! ${+ZSH_AUTOCOMPLLAMA_HOTKEY} )) && typeset -g ZSH_AUTOCOMPLLAMA_HOTKEY='^o'
 
 validate_required() {
   # Check that required tools are installed and the ollama server is reachable.
@@ -32,11 +34,14 @@ validate_required() {
   fi
 }
 
+# ZLE widget: replace the current line with a completion suggested by ollama.
 zsh_autocompllama() {
-  validate_required
-  if [ $? -eq 1 ]; then
+  local err
+  if ! err=$(validate_required 2>&1); then
+    zle -M "$err"
     return 1
   fi
+  [[ -n $BUFFER ]] || return 0
 
   # Construct command.
   local ZSH_OLLAMA_COMMANDS_USER_QUERY=$BUFFER
@@ -68,7 +73,6 @@ zsh_autocompllama() {
     ],
     "stream": false
   }'
-  ret=$?
 
   # Query ollama.
   local ZSH_OLLAMA_COMMAND_RESPONSE=$(curl --silent "${ZSH_OLLAMA_URL}/api/chat" \
@@ -77,10 +81,9 @@ zsh_autocompllama() {
   
   # Parse response.
   BUFFER=$(echo $ZSH_OLLAMA_COMMAND_RESPONSE | jq -r '.message."content"')
-
-  echo $BUFFER
-
-  return $ret
+  CURSOR=$#BUFFER
+  zle redisplay
 }
 
-autoload zsh_autocompllama
+zle -N zsh_autocompllama
+bindkey "$ZSH_AUTOCOMPLLAMA_HOTKEY" zsh_autocompllama
