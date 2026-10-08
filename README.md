@@ -119,6 +119,16 @@ into place for development. `--help` lists the rest.
 Then open a new shell and type something. If nothing shows up, run
 `zsh_autocompllama_check`.
 
+### For AI assistants
+
+The whole project is published as one text file, the README, the installer
+and the plugin source together, at
+<https://xboluna.github.io/zsh-autocompLlama/llms-full.txt>, with a short
+index at <https://xboluna.github.io/zsh-autocompLlama/llms.txt>. Point an
+assistant at the first one to have it install, configure or troubleshoot
+the plugin for you, or to ask how something works. Both are rebuilt from
+`main` on every change by `scripts/build-site.sh`.
+
 ### By hand
 
 ```sh
