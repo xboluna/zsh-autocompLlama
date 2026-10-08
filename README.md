@@ -7,23 +7,42 @@ As you type, [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggesti
 shows the best matching command from your history instantly as grey text. When
 you pause, a spinner at the right of the prompt shows a local model looking at
 your history and directory, and its pick replaces the grey text.
-Accept it with → as usual, or keep typing and it gets out of the way. Nothing
-you typed is ever changed. The model is never allowed to just make something
-up:
+Accept it with → as usual, or keep typing and it gets out of the way. A
+suggestion that does not continue what you typed, a rewrite, is shown on its
+own line under the prompt instead, coloured like a diff, and accepted with
+the same → key:
+
+```
+❯ git puhs
+⇥ git push
+```
+
+Characters the rewrite changes are yellow and characters it adds are green;
+characters of your typed text that it drops are red in the typed line.
+Any other key dismisses it, and Enter runs what you typed, not the rewrite.
+Nothing you typed is ever changed without one of those keypresses. The model
+is never allowed to just make something up:
 
 1. Commands from your history that match what you typed are offered to the
    model as **candidates** and it has to pick one of them (or none). The reply
    is constrained with a JSON schema, so the worst case is a wrong *real*
    command, never a fabricated flag.
-2. Only when nothing in your history fits does it finish what you typed.
+2. If nothing in your history continues what you typed, commands that
+   *nearly* match it are offered the same way (`git puhs` finds `git push`,
+   `gti sta` finds `git status`): the first word may be one edit away from
+   one you have used, and the rest is compared by edit distance. A pick from
+   these is shown as a rewrite, since it does not continue what you typed.
+3. Only when neither fits does it finish what you typed.
    This is a fill-in-the-middle completion, not a chat: the model sees a
    transcript of your OS, working directory, file listing and recent commands
    ending with your partial command, followed by the next prompt line, and
    fills in what goes between. It can only add characters after what you
    typed, never rewrite it, and it cannot just end the line. The result is
    rejected unless its first word resolves to a real command, builtin,
-   function, alias or executable and every path-like argument exists. You can
-   turn this fallback off entirely.
+   function, alias or executable and every path-like argument exists, and if
+   it extends the word you were typing, that word must be one you have used
+   before, a command, a file or a flag, so a typo is never "completed" into a
+   longer typo. You can turn this fallback off entirely.
 
 Requests run in the background, so the shell stays responsive while the model
 thinks, and a result is discarded if you kept typing in the meantime. If the
@@ -97,10 +116,17 @@ Set any of these in `~/.zshrc` before the plugin loads.
 | `ZSH_AUTOCOMPLLAMA_MIN_CHARS` | `2` | Do not ask for shorter buffers. |
 | `ZSH_AUTOCOMPLLAMA_SPINNER` | `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` | Spinner frames (one character each) shown at the right of the prompt while thinking. One character makes it static; empty disables. |
 | `ZSH_AUTOCOMPLLAMA_SPINNER_INTERVAL` | `0.08` | Seconds per spinner frame. |
-| `ZSH_AUTOCOMPLLAMA_SPINNER_COLOR` | `yellow` | Prompt colour of the spinner. |
+| `ZSH_AUTOCOMPLLAMA_SPINNER_COLOR` | `yellow` | Prompt colour of the spinner, also of the rewrite line's prefix. |
+| `ZSH_AUTOCOMPLLAMA_REPLACEMENT_PREFIX` | `'⇥ '` | Marker drawn in the prompt's margin before a rewrite, which is lined up under the typed command. Empty for none. |
+| `ZSH_AUTOCOMPLLAMA_REPLACEMENT_STYLE` | empty | `region_highlight` style of the rewrite (e.g. `fg=244`). Empty uses `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE`. |
+| `ZSH_AUTOCOMPLLAMA_ACCEPT_KEYS` | `('^[[C' '^[OC')` (→) | Keys that accept a rewrite, bound in the emacs and vi insert keymaps. With no rewrite showing each does what it did before. Empty leaves the keys alone. |
+| `ZSH_AUTOCOMPLLAMA_STYLE_CHANGED` | `fg=yellow` | Style of characters the rewrite changes. |
+| `ZSH_AUTOCOMPLLAMA_STYLE_ADDED` | `fg=green` | Style of characters the rewrite adds. |
+| `ZSH_AUTOCOMPLLAMA_STYLE_REMOVED` | `fg=red` | Style, in the typed line, of characters the rewrite drops. Empty any of the three to skip that colouring. |
 | `ZSH_AUTOCOMPLLAMA_LOG` | empty | File to append one line per request to (time, typed text, result). Handy when nothing shows up. |
 | `ZSH_AUTOCOMPLLAMA_BACKOFF` | `30` | Seconds to pause automatic suggestions after a failed request. |
 | `ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES` | `10` | History candidates offered to the model. `0` skips straight to generation. |
+| `ZSH_AUTOCOMPLLAMA_MAX_NEAR` | `5` | Near-miss history candidates offered when no history command continues the typed text. `0` disables rewrites from history. |
 | `ZSH_AUTOCOMPLLAMA_GENERATE` | `1` | Allow writing a command from scratch when no candidate fits. `0` only ever suggests commands you have run before. |
 | `ZSH_AUTOCOMPLLAMA_MAX_FILES` | `30` | Directory entries included as context. `0` disables. |
 | `ZSH_AUTOCOMPLLAMA_MAX_HISTORY` | `10` | Recent commands from this directory tree included as context. `0` disables. |
@@ -134,11 +160,19 @@ the buffer is still what it was asked about. That function:
 1. Collects candidates with `_zsh_autocompllama_candidates`: history commands
    that continue the typed text, those run in this directory tree before
    others, then by frequency. The same ranking powers the `autocompllama`
-   zsh-autosuggestions strategy.
+   zsh-autosuggestions strategy. zsh-histdb only knows commands run since it
+   was installed, so plain shell history is consulted after it in every
+   lookup.
 2. If there are any, asks the model to choose with `_zsh_autocompllama_pick`,
    using ollama's structured output with an `enum` of the candidates plus
    `NONE`.
-3. Otherwise, or on `NONE`, asks `/api/generate` with the transcript from
+3. Otherwise, collects near misses with `_zsh_autocompllama_near_candidates`:
+   history commands whose first word is within one edit of the typed one,
+   scored by the edit distance between the rest of the typed text and the
+   same-length start of each command (one edit allowed per five characters),
+   and asks the model to choose among those, telling it the typed text is
+   probably mistyped.
+4. Otherwise, or on `NONE`, asks `/api/generate` with the transcript from
    `_zsh_autocompllama_transcript` plus the partial command as `prompt` and
    the next prompt line as `suffix` (`_zsh_autocompllama_continue`), so the
    model fills in the rest of the command, and validates the result with
@@ -147,6 +181,27 @@ the buffer is still what it was asked about. That function:
 
 Every request body is built with `jq` (so anything you type is escaped
 correctly) and uses temperature 0.
+
+A result that starts with the typed text is handed to zsh-autosuggestions as
+grey suffix text. One that does not is a rewrite: it is drawn by the plugin
+itself as a new line in `POSTDISPLAY` (with an explicit `zle -R`, since a
+widget run as an fd handler is not redrawn on its own), coloured with
+`region_highlight` entries tagged `memo=zsh-autocompllama`: the diff spans
+come from a character-level edit alignment of the typed text and the
+rewrite, computed once when it is shown. The accept keys are wrapped by a
+widget that swaps the buffer for the rewrite when, and only when, the
+rewrite is what is on screen, and falls through to the original widget
+otherwise, so → still accepts grey text. zsh-autosuggestions treats any
+keystroke that edits the buffer as a reason to drop `POSTDISPLAY`, which
+dismisses the rewrite for free; if it empties `POSTDISPLAY` under a rewrite
+without the buffer changing (an async answer of "no suggestion"), the
+redraw hook puts the rewrite back, and if anything else appears there the
+rewrite is forgotten, so what is shown is always what → inserts. Its own
+other accept key (End) would append the line to the buffer, so the redraw
+hook turns that into accepting the rewrite. Near-miss picks are the only
+source of rewrites: the
+fill-in-the-middle request can only append, so its results are always
+suffixes.
 
 ## Acknowledgements
 
