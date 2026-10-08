@@ -8,7 +8,7 @@
 # plain page that links to the text files is written instead.
 set -euo pipefail
 
-root=$(cd "$(dirname "$0")/.." && pwd)
+root=$(cd "$(dirname "$0")/../.." && pwd)
 out=${1:-$root/_site}
 site=https://xboluna.github.io/zsh-autocompLlama
 repo=https://github.com/xboluna/zsh-autocompLlama

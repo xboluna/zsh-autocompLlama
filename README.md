@@ -127,7 +127,7 @@ and the plugin source together, at
 index at <https://xboluna.github.io/zsh-autocompLlama/llms.txt>. Point an
 assistant at the first one to have it install, configure or troubleshoot
 the plugin for you, or to ask how something works. Both are rebuilt from
-`main` on every change by `scripts/build-site.sh`.
+`main` on every change by `.github/scripts/build-site.sh`.
 
 ### By hand
 

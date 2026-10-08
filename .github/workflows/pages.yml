@@ -3,7 +3,7 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: [README.md, install.sh, zsh-autocompllama.zsh, scripts/build-site.sh, .github/workflows/pages.yml]
+    paths: [README.md, install.sh, zsh-autocompllama.zsh, .github/scripts/build-site.sh, .github/workflows/pages.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.x'
       - run: pip install markdown
-      - run: scripts/build-site.sh _site
+      - run: .github/scripts/build-site.sh _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
