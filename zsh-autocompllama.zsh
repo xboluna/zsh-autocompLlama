@@ -362,13 +362,17 @@ _zsh_autocompllama_near_candidates() {
   [[ -n $head ]] || return 0
   (( $#typed <= 40 )) || return 0
 
-  # First words of history within one edit of the typed one (or equal to it).
+  # First words of history within one edit of the typed one (or equal to
+  # it). A first word that already names a command or alias is taken as
+  # meant: only typos get fuzzed, so 'gst ' is not rewritten into git.
   local -a heads
   local h
+  local -i fuzz=1
+  whence -w -- "$head" >/dev/null 2>&1 && fuzz=0
   for h in ${(f)"$(_zsh_autocompllama_history_heads)"}; do
     if [[ $h == $head ]]; then
       heads+=( "$h" )
-    elif (( $#head >= 3 && ($#h - $#head) >= -1 && ($#h - $#head) <= 1 )); then
+    elif (( fuzz && $#head >= 3 && ($#h - $#head) >= -1 && ($#h - $#head) <= 1 )); then
       _zsh_autocompllama_distance "$head" "$h"
       (( REPLY <= 1 )) && heads+=( "$h" )
     fi
@@ -380,9 +384,11 @@ _zsh_autocompllama_near_candidates() {
   local -a pool scored
   pool=( ${(f)"$(_zsh_autocompllama_commands_by_head "$partial" 50 "${heads[@]}")"} )
   local -i allowed=$(( 1 + $#rest / 5 )) i d k
-  local cmd tail
+  local cmd tail trimmed=${typed%%[[:space:]]#}
   for (( i = 1; i <= $#pool; i++ )); do
     cmd=$pool[i]
+    # The typed text minus its trailing space is not a rewrite of it.
+    [[ $cmd == $trimmed ]] && continue
     # The command after its first word.
     tail=${${${cmd##[[:space:]]#}##[^[:space:]]#}##[[:space:]]#}
     d=999
@@ -985,13 +991,16 @@ _zsh_autocompllama_complete() {
   setopt localoptions extendedglob
   local partial=$1
   local completion
+  # Whatever path answers, suggesting the typed text with its trailing
+  # whitespace removed is suggesting nothing.
+  local trimmed=${partial%%[[:space:]]#}
 
   # First choice: pick from commands the user has actually run.
   local -a candidates
   candidates=( ${(f)"$(_zsh_autocompllama_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES)"} )
   if (( $#candidates )); then
     completion=$(_zsh_autocompllama_pick "$partial" "${candidates[@]}") || return 1
-    if [[ -n $completion ]]; then
+    if [[ -n $completion && $completion != $trimmed ]]; then
       print -r -- "$completion"
       return 0
     fi
@@ -1007,7 +1016,7 @@ _zsh_autocompllama_complete() {
   (( prose )) || candidates=( ${(f)"$(_zsh_autocompllama_near_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_NEAR)"} )
   if (( $#candidates )); then
     completion=$(_zsh_autocompllama_pick -n "$partial" "${candidates[@]}") || return 1
-    if [[ -n $completion ]]; then
+    if [[ -n $completion && $completion != $trimmed ]]; then
       print -r -- "$completion"
       return 0
     fi
@@ -1027,7 +1036,7 @@ _zsh_autocompllama_complete() {
       return 2
     fi
     completion=$(_zsh_autocompllama_intent "$partial") || return 1
-    if [[ -z $completion || $completion == $partial ]]; then
+    if [[ -z $completion || $completion == $trimmed ]]; then
       print -u2 -r -- "zsh-autocompllama: no command for that from ${ZSH_OLLAMA_MODEL}"
       return 2
     fi
@@ -1037,7 +1046,7 @@ _zsh_autocompllama_complete() {
       # One more round, telling the model exactly what was wrong.
       local first=$completion problem=$REPLY
       completion=$(_zsh_autocompllama_intent "$partial" "$first" "$problem") || return 1
-      if [[ -z $completion || $completion == $partial ]]; then
+      if [[ -z $completion || $completion == $trimmed ]]; then
         print -u2 -r -- "zsh-autocompllama: rejected translation ($problem): $first; no correction"
         return 2
       fi
