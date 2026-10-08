@@ -241,7 +241,12 @@ exist. A hard failure on the
 translation path sends the model its own answer and a one-sentence
 statement of the problem, with the tool's real subcommands when that was
 it, for a single corrected try; on the fill-in path it is simply dropped. A
-soft failure is shown, with the doubtful words underlined.
+soft failure is shown, with the doubtful words underlined, except when the
+translated command reads its path arguments (cd, cat, ls, vim and the
+like): then the path was a guess, so the model is shown what the nearest
+existing directory contains (`_zsh_autocompllama_path_hint`) and gets the
+same single corrected try, which turns `cd ~/Programming/api-server` into
+`cd ~/Programming/api_server`.
 
 A result that starts with the typed text is handed to zsh-autosuggestions as
 grey suffix text. One that does not is a rewrite: it is drawn by the plugin
