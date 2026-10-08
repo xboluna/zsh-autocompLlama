@@ -46,6 +46,14 @@ mkdir -p "$out"
   echo '```zsh'
   cat "$root/zsh-autocompllama.zsh"
   echo '```'
+  echo
+  echo "---"
+  echo
+  echo "# cli.zsh (the zsh-autocompllama command: update, configure, check)"
+  echo
+  echo '```zsh'
+  cat "$root/cli.zsh"
+  echo '```'
 } > "$out/llms-full.txt"
 
 # ---- llms.txt -------------------------------------------------------------
