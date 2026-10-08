@@ -87,7 +87,39 @@ retrying on every keystroke.
 
 ## Installation
 
-With oh-my-zsh:
+With oh-my-zsh and ollama installed, one command installs or updates
+everything:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/xboluna/zsh-autocompLlama/main/install.sh | zsh
+```
+
+It fails before touching anything if oh-my-zsh, ollama, git, curl or jq is
+missing. Otherwise it clones this plugin and zsh-autosuggestions into your
+oh-my-zsh custom plugins directory (or updates them if they are there),
+pulls the model if the ollama server is up and does not have it, and adds
+one marked block to `~/.zshrc`, just before oh-my-zsh is sourced:
+
+```sh
+# >>> zsh-autocompllama (managed by install.sh; edit outside this block) >>>
+plugins+=(zsh-autosuggestions zsh-autocompllama)
+ZSH_AUTOSUGGEST_STRATEGY=(autocompllama)   # instant history suggestion while the model thinks
+# <<< zsh-autocompllama <<<
+```
+
+Anything you already have is respected: a plugin listed in your own
+`plugins=(...)` is not added again, a strategy or model you set yourself is
+not overridden, and nothing outside the block is edited. A backup of
+`~/.zshrc` is written before any change. Running the script again is the
+way to update; when nothing needs doing, it does nothing. `--dry-run` shows
+what it would do, `--model NAME` picks another model, `--no-model` skips
+the pull, and from a checkout `./install.sh --link` symlinks that checkout
+into place for development. `--help` lists the rest.
+
+Then open a new shell and type something. If nothing shows up, run
+`zsh_autocompllama_check`.
+
+### By hand
 
 ```sh
 git clone https://github.com/xboluna/zsh-autocompLlama \
