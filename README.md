@@ -38,8 +38,11 @@ you typed a sentence, the model is never allowed to just make something up:
    the one path where the model writes a command you may never have run, so
    it only applies to text whose first word is no command, alias or
    function (and no near miss of one), or that reads as English, and the
-   answer still has to parse and name a real command and existing paths.
-   You can turn it off.
+   answer still has to parse, name a real command and, for git, docker,
+   kubectl, cargo, go and helm, a real subcommand (other tools take hundreds
+   of milliseconds to print their help, so they are not checked). When it
+   does not, the model is told exactly what was wrong and gets one more
+   try. You can turn either off.
 4. Only when none of that applies does it finish what you typed.
    This is a fill-in-the-middle completion, not a chat: the model sees a
    transcript of your OS, working directory, file listing and recent commands
@@ -47,10 +50,12 @@ you typed a sentence, the model is never allowed to just make something up:
    fills in what goes between. It can only add characters after what you
    typed, never rewrite it, and it cannot just end the line. The result is
    rejected unless its first word resolves to a real command, builtin,
-   function, alias or executable and every path-like argument exists, and if
-   it extends the word you were typing, that word must be one you have used
-   before, a command, a file or a flag, so a typo is never "completed" into a
-   longer typo. You can turn this fallback off entirely.
+   function, alias or executable, and if it extends the word you were
+   typing, that word must be one you have used before, a command, a file or
+   a flag, so a typo is never "completed" into a longer typo. A path-like
+   argument that does not exist does not reject the suggestion, since the
+   command may be about to create it; it is shown underlined so you can see
+   it is unverified. You can turn this fallback off entirely.
 
 Requests run in the background, so the shell stays responsive while the model
 thinks, and a result is discarded if you kept typing in the meantime. If the
@@ -82,7 +87,49 @@ retrying on every keystroke.
 
 ## Installation
 
-With oh-my-zsh:
+With oh-my-zsh and ollama installed, one command installs or updates
+everything:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/xboluna/zsh-autocompLlama/main/install.sh | zsh
+```
+
+It fails before touching anything if oh-my-zsh, ollama, git, curl or jq is
+missing. Otherwise it clones this plugin and zsh-autosuggestions into your
+oh-my-zsh custom plugins directory (or updates them if they are there),
+pulls the model if the ollama server is up and does not have it, and adds
+one marked block to `~/.zshrc`, just before oh-my-zsh is sourced:
+
+```sh
+# >>> zsh-autocompllama (managed by install.sh; edit outside this block) >>>
+plugins+=(zsh-autosuggestions zsh-autocompllama)
+ZSH_AUTOSUGGEST_STRATEGY=(autocompllama)   # instant history suggestion while the model thinks
+# <<< zsh-autocompllama <<<
+```
+
+Anything you already have is respected: a plugin listed in your own
+`plugins=(...)` is not added again, a strategy or model you set yourself is
+not overridden, and nothing outside the block is edited. A backup of
+`~/.zshrc` is written before any change. Running the script again is the
+way to update; when nothing needs doing, it does nothing. `--dry-run` shows
+what it would do, `--model NAME` picks another model, `--no-model` skips
+the pull, and from a checkout `./install.sh --link` symlinks that checkout
+into place for development. `--help` lists the rest.
+
+Then open a new shell and type something. If nothing shows up, run
+`zsh_autocompllama_check`.
+
+### For AI assistants
+
+The whole project is published as one text file, the README, the installer
+and the plugin source together, at
+<https://xboluna.github.io/zsh-autocompLlama/llms-full.txt>, with a short
+index at <https://xboluna.github.io/zsh-autocompLlama/llms.txt>. Point an
+assistant at the first one to have it install, configure or troubleshoot
+the plugin for you, or to ask how something works. Both are rebuilt from
+`main` on every change by `.github/scripts/build-site.sh`.
+
+### By hand
 
 ```sh
 git clone https://github.com/xboluna/zsh-autocompLlama \
@@ -107,7 +154,8 @@ source /path/to/zsh-autocompLlama/zsh-autocompllama.plugin.zsh
 
 If nothing shows up, run `zsh_autocompllama_check` to see what is missing, and
 set `ZSH_AUTOCOMPLLAMA_LOG=~/.cache/zsh-autocompllama.log` to see what the
-model answered for what you typed. The grey suggestion text is drawn by
+model answered for what you typed, along with the prompt and output token
+counts and time of every request. The grey suggestion text is drawn by
 zsh-autosuggestions in `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE` (default `fg=8`);
 some terminal palettes make that colour nearly invisible, in which case
 `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=244'` is a safe mid-grey.
@@ -139,9 +187,13 @@ Set any of these in `~/.zshrc` before the plugin loads.
 | `ZSH_AUTOCOMPLLAMA_INTENT` | `1` | Translate a description of what you want into a command, shown as a rewrite. `0` disables. |
 | `ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS` | `2` | Fewer words than this are never treated as a description. |
 | `ZSH_AUTOCOMPLLAMA_MAX_FILES` | `30` | Directory entries included as context. `0` disables. |
-| `ZSH_AUTOCOMPLLAMA_MAX_HISTORY` | `10` | Recent commands from this directory tree included as context. `0` disables. |
+| `ZSH_AUTOCOMPLLAMA_MAX_HISTORY` | `10` | Recent commands of this session (with directory and exit status where relevant) included as context. `0` disables. |
+| `ZSH_AUTOCOMPLLAMA_MAX_ALIASES` | `15` | Aliases you use most, with expansions, included as context. `0` disables. |
+| `ZSH_AUTOCOMPLLAMA_MAX_PROJECT_ENTRIES` | `8` | Make targets, npm scripts, just recipes and compose services of the current directory included as context, per kind. `0` disables. |
+| `ZSH_AUTOCOMPLLAMA_STYLE_UNVERIFIED` | `underline` | Style of path arguments in a generated suggestion that do not exist. |
+| `ZSH_AUTOCOMPLLAMA_REPAIR` | `1` | Give the model one corrected try when a translated description fails validation. `0` drops it. |
 | `ZSH_AUTOCOMPLLAMA_KEEP_ALIVE` | `-1` | How long ollama keeps the model loaded. `-1` is forever, so a completion never waits for the model to load; `5m` frees memory when idle. |
-| `ZSH_AUTOCOMPLLAMA_NUM_CTX` | `2048` | Context window. Small keeps the KV cache small. |
+| `ZSH_AUTOCOMPLLAMA_NUM_CTX` | `4096` | Context window. Small keeps the KV cache small; ollama silently drops the start of a prompt that does not fit. |
 | `ZSH_AUTOCOMPLLAMA_NUM_PREDICT` | `64` | Output token cap. |
 
 ### Keeping ollama lightweight
@@ -200,6 +252,38 @@ the buffer is still what it was asked about. That function:
 
 Every request body is built with `jq` (so anything you type is escaped
 correctly) and uses temperature 0.
+
+The context block is the system message of every chat request, identical
+across the pick, near-miss and translation requests, so that ollama's prompt
+cache serves it and a request only pays for its own task text: a warm
+request costs a few hundred milliseconds where a cold one of the same size
+costs seconds. (The fill-in request has a different shape and cannot share
+it, so it carries only the name-supplying cards.) In order of how rarely it
+changes: OS; which of a list of tools that change what to suggest are
+installed (checked once at load); the aliases you use most, by how often
+they start a command in the last 2000 lines of history, skipping ones that
+only decorate the same command; the owner/repo of the git remote and what
+the project can run (make targets, npm scripts, just recipes, compose
+services), both computed when you change directory and again only if one of
+those files changed; the directory, branch and file listing; and the last
+commands of this session, with exit status when one failed and directory
+when it was elsewhere. Each card is capped, and the prompt token count and
+time of every request are logged, so the cost of a card can be seen rather
+than guessed. With `OLLAMA_NUM_PARALLEL=1`, a fill-in request evicts the
+cached chat prefix and the next pick is cold again; `OLLAMA_NUM_PARALLEL=2`
+keeps both warm at the cost of a second KV cache.
+
+A generated command (fill-in-the-middle or translation) is checked by
+`_zsh_autocompllama_check_command`, with two kinds of verdict. Hard: the
+first word is not a command, or (translations only) the line does not
+parse or names an unknown subcommand of git (checked against
+`git --list-cmds`, 20 ms) or of docker, kubectl, cargo, go or helm (which
+exit non-zero at once under `--help`). Soft: a path argument does not
+exist. A hard failure on the
+translation path sends the model its own answer and a one-sentence
+statement of the problem, with the tool's real subcommands when that was
+it, for a single corrected try; on the fill-in path it is simply dropped. A
+soft failure is shown, with the doubtful words underlined.
 
 A result that starts with the typed text is handed to zsh-autosuggestions as
 grey suffix text. One that does not is a rewrite: it is drawn by the plugin
