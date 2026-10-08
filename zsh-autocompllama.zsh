@@ -953,6 +953,49 @@ _zsh_autocompllama_check_subcommand() {
   return 0
 }
 
+# For a path that does not exist, what the model needs to correct it: the
+# nearest existing ancestor and what it contains (directories first, at
+# most 40 entries, no dotfiles). Result in REPLY.
+# Usage: _zsh_autocompllama_path_hint <path as written>
+_zsh_autocompllama_path_hint() {
+  setopt localoptions extendedglob nullglob
+  local written=$1 dir shown
+  dir=${written#[\"\']}; dir=${dir%[\"\']}; dir=${~dir}
+  [[ $dir == /* ]] || dir=$PWD/$dir
+  dir=${dir:a}
+  while [[ ! -d $dir && $dir != / ]]; do dir=${dir:h}; done
+  local -a dirs files entries
+  dirs=( $dir/*(/:t) ); files=( $dir/*(^/:t) )
+  entries=( ${^dirs}/ $files )
+  local -i n=$#entries
+  shown=${(j:, :)entries[1,40]}
+  (( n > 40 )) && shown+=" (and $(( n - 40 )) more)"
+  local display=${dir/#$HOME/\~}
+  REPLY="'$written' does not exist. $display contains: ${shown:-nothing}."
+}
+
+# Is <b> a plausible correction of the name <a>: the same name up to case
+# and separators, one containing the other, or within two edits? Guards the
+# path repair against the model picking an unrelated entry.
+_zsh_autocompllama_close_names() {
+  local a=${(L)${1:t}//[-_. ]/} b=${(L)${2:t}//[-_. ]/}
+  [[ -n $a && -n $b ]] || return 1
+  [[ $a == *$b* || $b == *$a* ]] && return 0
+  _zsh_autocompllama_distance "$a" "$b"
+  (( REPLY <= 2 ))
+}
+
+# Does the command read its path arguments (so a path that does not exist
+# is a mistake, not something it is about to create)? cd, cat and the like
+# do; mkdir, touch, cp and mv may be given a path that is not there yet.
+_zsh_autocompllama_reads_paths() {
+  local -a words; words=( ${(z)1} )
+  case $words[1] in
+    cd|cat|less|more|head|tail|bat|vim|vi|nvim|nano|code|open|subl|rm|rmdir|ls|tree|du|wc|grep|rg|find|diff|source|python|python3|node|ruby|sh|zsh|bash) return 0 ;;
+  esac
+  return 1
+}
+
 # Every check a translated command must pass. 0: fine. 1: hard failure,
 # with what was wrong in REPLY (phrased for the model). 2: fine except for
 # the unverifiable path arguments in reply.
@@ -1052,6 +1095,42 @@ _zsh_autocompllama_complete() {
       fi
       _zsh_autocompllama_check_translation "$completion"; rc=$?
       (( rc == 1 )) && REPLY="$problem then $REPLY"
+    elif (( rc == 2 && ZSH_AUTOCOMPLLAMA_REPAIR )) && _zsh_autocompllama_reads_paths "$completion"; then
+      # The command reads a path that is not there: the model guessed a
+      # name. Show it what the nearest existing directory holds and let it
+      # pick the real one. Same single extra round as above.
+      local first=$completion hint w
+      local -a soft; soft=( "${reply[@]}" )
+      for w in "${soft[@]}"; do
+        _zsh_autocompllama_path_hint "$w"
+        hint+="${hint:+ }$REPLY"
+      done
+      hint+=" Answer again with the entry from that list that matches what the user described, \
+or an empty string if none does."
+      # Take the correction only if it names something close to the guess:
+      # a model handed a listing may otherwise pick any entry at all.
+      local second ok=0
+      second=$(_zsh_autocompllama_intent "$partial" "$first" "$hint") || return 1
+      if [[ -n $second && $second != $trimmed && $second != $first ]]; then
+        local -a new_words; new_words=( ${(z)second} )
+        ok=1
+        for w in "${soft[@]}"; do
+          local close=0 nw
+          for nw in "${new_words[@]}"; do
+            _zsh_autocompllama_close_names "$w" "$nw" && { close=1; break; }
+          done
+          (( close )) || { ok=0; break; }
+        done
+      fi
+      if (( ok )); then
+        _zsh_autocompllama_check_translation "$second"
+        case $? in
+          0|2) completion=$second; rc=$? ;;
+          *) reply=( "${soft[@]}" ) ;;
+        esac
+      else
+        reply=( "${soft[@]}" )
+      fi
     fi
     if (( rc == 1 )); then
       print -u2 -r -- "zsh-autocompllama: rejected translation ($REPLY): $completion"
