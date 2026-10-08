@@ -4,7 +4,10 @@
 # Works on top of zsh-autosuggestions. It keeps showing its instant history
 # suggestion as grey text; once you pause typing, the model's pick replaces
 # that grey text, and you accept it the same way (right arrow / end).
-# Nothing you typed is ever changed.
+# A pick that does not continue what you typed (a rewrite) is instead shown
+# on its own line under the prompt and accepted with the right arrow as
+# well; any other key dismisses it. Nothing you typed is ever changed
+# without that keypress.
 
 # ---------------------------------------------------------------------------
 # Configuration. Set any of these in ~/.zshrc before the plugin loads.
@@ -31,6 +34,24 @@
 # Prompt colour of the spinner (yellow rather than the dim colour 8, which many
 # terminal palettes render almost invisibly).
 (( ! ${+ZSH_AUTOCOMPLLAMA_SPINNER_COLOR} )) && typeset -g ZSH_AUTOCOMPLLAMA_SPINNER_COLOR='yellow'
+# A suggestion that does not continue the typed text (a rewrite) is drawn on
+# its own line under the prompt, lined up with the typed command, with
+# PREFIX right-aligned in the prompt's margin before it (empty for none),
+# and accepted with any of ACCEPT_KEYS (bindkey sequences; the default is
+# the right arrow in both of its encodings, the same key that accepts grey
+# text). STYLE is a region_highlight spec for the command; empty uses
+# zsh-autosuggestions' grey. The prefix takes the spinner colour.
+(( ! ${+ZSH_AUTOCOMPLLAMA_REPLACEMENT_PREFIX} )) && typeset -g ZSH_AUTOCOMPLLAMA_REPLACEMENT_PREFIX='⇥ '
+(( ! ${+ZSH_AUTOCOMPLLAMA_REPLACEMENT_STYLE} )) && typeset -g ZSH_AUTOCOMPLLAMA_REPLACEMENT_STYLE=
+(( ! ${+ZSH_AUTOCOMPLLAMA_ACCEPT_KEYS} )) && typeset -ga ZSH_AUTOCOMPLLAMA_ACCEPT_KEYS=('^[[C' '^[OC')
+# The rewrite is coloured like a diff against what you typed: characters it
+# changes in CHANGED, characters it adds in ADDED, and the characters of
+# your typed text that it drops in REMOVED (those are coloured in the
+# typed line, since they are not in the rewrite). Empty any of these to
+# leave that part in the plain style.
+(( ! ${+ZSH_AUTOCOMPLLAMA_STYLE_CHANGED} )) && typeset -g ZSH_AUTOCOMPLLAMA_STYLE_CHANGED='fg=yellow'
+(( ! ${+ZSH_AUTOCOMPLLAMA_STYLE_ADDED} )) && typeset -g ZSH_AUTOCOMPLLAMA_STYLE_ADDED='fg=green'
+(( ! ${+ZSH_AUTOCOMPLLAMA_STYLE_REMOVED} )) && typeset -g ZSH_AUTOCOMPLLAMA_STYLE_REMOVED='fg=red'
 # Append one line per request (time, what was typed, what came back) to this
 # file. Off by default; useful when suggestions do not show up.
 (( ! ${+ZSH_AUTOCOMPLLAMA_LOG} )) && typeset -g ZSH_AUTOCOMPLLAMA_LOG=
@@ -42,6 +63,11 @@
 # the model as candidates; it must pick one of them (or none), so this path
 # cannot invent a command. 0 disables it.
 (( ! ${+ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES=10
+# When nothing in history continues the typed text, up to this many history
+# commands that nearly match it (a typo in the first word, or in the rest)
+# are offered instead. A pick from these is a rewrite, shown on its own
+# line. 0 disables it.
+(( ! ${+ZSH_AUTOCOMPLLAMA_MAX_NEAR} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_NEAR=5
 # When no history candidate fits, let the model write a command from scratch.
 # Set to 0 to only ever suggest commands you have run before.
 (( ! ${+ZSH_AUTOCOMPLLAMA_GENERATE} )) && typeset -g ZSH_AUTOCOMPLLAMA_GENERATE=1
@@ -132,17 +158,27 @@ _zsh_autocompllama_recent_commands() {
   fi
 }
 
+# Plain shell history, most recent first, duplicates removed. zsh-histdb
+# only knows commands run since it was installed, so every lookup below
+# consults its database first (for the directory-aware ranking) and then
+# this, so that older commands still count.
+_zsh_autocompllama_plain_history() {
+  local -a lines
+  lines=( ${(f)"$(fc -ln 1 2>/dev/null)"} )
+  print -rl -- ${(u)${(Oa)lines}}
+}
+
 # History commands that continue the partial command, best first, one per
-# line: commands run in this directory tree rank above others, then by
-# frequency, then by recency. With zsh-histdb loaded the ranking uses its
-# database; otherwise plain shell history, most recent first.
-# Usage: _zsh_autocompllama_candidates <partial> <limit>
+# line: with zsh-histdb loaded, commands run in this directory tree rank
+# above others, then by frequency, then by recency; plain shell history
+# follows, most recent first. Usage: _zsh_autocompllama_candidates <partial> <limit>
 _zsh_autocompllama_candidates() {
   local partial=$1 limit=$2
   (( limit > 0 )) || return 0
+  local -a out
   if (( $+functions[_histdb_query] )); then
     local p=$(sql_escape "$partial") d=$(sql_escape "$PWD")
-    _histdb_query "
+    out=( ${(f)"$(_histdb_query "
       select commands.argv
       from history
       left join commands on history.command_id = commands.rowid
@@ -156,14 +192,153 @@ _zsh_autocompllama_candidates() {
         max(places.dir like '$d%') desc,
         count(*) desc,
         max(history.start_time) desc
-      limit $limit"
-  else
-    local -a lines
-    lines=( ${(f)"$(fc -ln 1 2>/dev/null)"} )
-    lines=( ${(u)${(Oa)lines}} )
-    lines=( ${(M)lines:#${partial}?*} )
-    print -rl -- ${lines[1,limit]}
+      limit $limit")"} )
   fi
+  if (( $#out < limit )); then
+    local -a lines
+    lines=( ${(f)"$(_zsh_autocompllama_plain_history)"} )
+    out+=( ${(M)lines:#${partial}?*} )
+    out=( ${(u)out} )
+  fi
+  print -rl -- ${out[1,limit]}
+}
+
+# Edit distance between two strings, counting an adjacent transposition as
+# one edit (optimal string alignment). Result in REPLY; no subshell, since
+# this runs once per candidate.
+_zsh_autocompllama_distance() {
+  local a=$1 b=$2 c
+  local -i la=$#a lb=$#b i j cost best
+  if (( la == 0 )); then REPLY=$lb; return; fi
+  if (( lb == 0 )); then REPLY=$la; return; fi
+  local -a ca cb prev2 prev cur
+  for (( i = 1; i <= la; i++ )); do c=$a[i]; ca[i]=$(( #c )); done
+  for (( j = 1; j <= lb; j++ )); do c=$b[j]; cb[j]=$(( #c )); done
+  for (( j = 0; j <= lb; j++ )); do prev[j+1]=$j; done
+  for (( i = 1; i <= la; i++ )); do
+    cur=( $i )
+    for (( j = 1; j <= lb; j++ )); do
+      cost=$(( ca[i] != cb[j] ))
+      best=$(( prev[j+1] + 1 ))
+      (( cur[j] + 1 < best )) && best=$(( cur[j] + 1 ))
+      (( prev[j] + cost < best )) && best=$(( prev[j] + cost ))
+      if (( i > 1 && j > 1 && ca[i] == cb[j-1] && ca[i-1] == cb[j] && prev2[j-1] + 1 < best )); then
+        best=$(( prev2[j-1] + 1 ))
+      fi
+      cur[j+1]=$best
+    done
+    prev2=( "${prev[@]}" ); prev=( "${cur[@]}" )
+  done
+  REPLY=$prev[lb+1]
+}
+
+# Distinct first words of history commands, one per line.
+_zsh_autocompllama_history_heads() {
+  local -a heads
+  if (( $+functions[_histdb_query] )); then
+    heads=( ${(f)"$(_histdb_query "
+      select distinct substr(ltrim(commands.argv), 1, instr(ltrim(commands.argv) || ' ', ' ') - 1)
+      from commands where commands.argv != ''")"} )
+  fi
+  local -a lines
+  lines=( ${(f)"$(_zsh_autocompllama_plain_history)"} )
+  heads+=( ${lines[@]##[[:space:]]#} )
+  print -rl -- ${(u)heads[@]%%[[:space:]]*}
+}
+
+# History commands starting with one of <head>... (as their first word), not
+# starting with <partial>, best first by the usual ranking, at most <limit>.
+# Usage: _zsh_autocompllama_commands_by_head <partial> <limit> <head>...
+_zsh_autocompllama_commands_by_head() {
+  local partial=$1 limit=$2; shift 2
+  local -a heads out; heads=( "$@" )
+  (( $#heads )) || return 0
+  if (( $+functions[_histdb_query] )); then
+    local h clause
+    for h in "${heads[@]}"; do
+      h=$(sql_escape "$h")
+      clause+="${clause:+ or }commands.argv = '$h' or commands.argv like '$h %'"
+    done
+    out=( ${(f)"$(_histdb_query "
+      select commands.argv
+      from history
+      left join commands on history.command_id = commands.rowid
+      left join places on history.place_id = places.rowid
+      where ($clause)
+        and commands.argv not like '$(sql_escape "$partial")%'
+        and instr(commands.argv, char(10)) = 0
+      group by commands.argv
+      order by
+        max(places.dir = '$(sql_escape "$PWD")') desc,
+        max(places.dir like '$(sql_escape "$PWD")%') desc,
+        count(*) desc,
+        max(history.start_time) desc
+      limit $limit")"} )
+  fi
+  if (( $#out < limit )); then
+    local -a lines
+    lines=( ${(f)"$(_zsh_autocompllama_plain_history)"} )
+    local l
+    for l in "${lines[@]}"; do
+      [[ $l == "$partial"* ]] && continue
+      (( ${heads[(Ie)${${l##[[:space:]]#}%%[[:space:]]*}]} )) || continue
+      out+=( "$l" )
+      (( $#out >= 2 * limit )) && break
+    done
+    out=( ${(u)out} )
+  fi
+  print -rl -- ${out[1,limit]}
+}
+
+# History commands that nearly match a (presumably mistyped) partial
+# command, best first, one per line. The first word may be off by one edit
+# from a command you have used; the rest is compared by edit distance
+# against the same-length start of each command, allowing one edit per five
+# characters. Usage: _zsh_autocompllama_near_candidates <partial> <limit>
+_zsh_autocompllama_near_candidates() {
+  setopt localoptions extendedglob
+  local partial=$1 limit=$2
+  (( limit > 0 )) || return 0
+  local typed=${partial##[[:space:]]#}
+  local head=${typed%%[[:space:]]*}
+  local rest=${${typed#$head}##[[:space:]]#}
+  [[ -n $head ]] || return 0
+  (( $#typed <= 40 )) || return 0
+
+  # First words of history within one edit of the typed one (or equal to it).
+  local -a heads
+  local h
+  for h in ${(f)"$(_zsh_autocompllama_history_heads)"}; do
+    if [[ $h == $head ]]; then
+      heads+=( "$h" )
+    elif (( $#head >= 3 && ($#h - $#head) >= -1 && ($#h - $#head) <= 1 )); then
+      _zsh_autocompllama_distance "$head" "$h"
+      (( REPLY <= 1 )) && heads+=( "$h" )
+    fi
+  done
+  (( $#heads )) || return 0
+
+  # Score the best-ranked commands under those heads by how far the typed
+  # remainder is from their start.
+  local -a pool scored
+  pool=( ${(f)"$(_zsh_autocompllama_commands_by_head "$partial" 50 "${heads[@]}")"} )
+  local -i allowed=$(( 1 + $#rest / 5 )) i d k
+  local cmd tail
+  for (( i = 1; i <= $#pool; i++ )); do
+    cmd=$pool[i]
+    # The command after its first word.
+    tail=${${${cmd##[[:space:]]#}##[^[:space:]]#}##[[:space:]]#}
+    d=999
+    for k in $(( $#rest - 1 )) $#rest $(( $#rest + 1 )); do
+      (( k < 0 )) && continue
+      _zsh_autocompllama_distance "$rest" "${tail[1,k]}"
+      (( REPLY < d )) && d=$REPLY
+    done
+    (( d <= allowed )) && scored+=( "${(l:3::0:)d}${(l:3::0:)i} $cmd" )
+  done
+  (( $#scored )) || return 0
+  scored=( ${(o)scored} )
+  print -rl -- ${${scored[1,limit]}#* }
 }
 
 # zsh-autosuggestions strategy: the instant suggestion shown before the model
@@ -331,8 +506,12 @@ _zsh_autocompllama_continue() {
 # Ask the model to choose among candidate commands. Prints the chosen command,
 # or nothing if the model answers NONE. The reply is constrained with a JSON
 # schema whose only allowed values are the candidates, so it cannot be
-# anything else. Usage: _zsh_autocompllama_pick <partial> <candidate>...
+# anything else. With -n the candidates are near misses: the model is told
+# the partial command may be mistyped and the pick may replace it.
+# Usage: _zsh_autocompllama_pick [-n] <partial> <candidate>...
 _zsh_autocompllama_pick() {
+  local near=0
+  [[ $1 == -n ]] && { near=1; shift; }
   local partial=$1; shift
   local -a candidates; candidates=( "$@" )
 
@@ -346,6 +525,12 @@ The user message describes the machine, the working directory, its files and the
 the user recently ran there, then lists candidate commands from the user's history, then \
 gives a partial terminal command after 'Partial command:'. Choose the candidate that best \
 completes what the user is typing. Answer NONE if no candidate fits."
+  if (( near )); then
+    system_prompt+=" The partial command does not match any of the user's commands exactly \
+and is probably mistyped. The candidates are commands from the user's history that nearly \
+match it; choose the one the user most likely meant, even though it differs from what was typed. \
+Answer NONE unless a candidate is clearly what was meant."
+  fi
 
   local user_prompt
   user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Candidates:"$'\n'
@@ -361,6 +546,17 @@ completes what the user is typing. Answer NONE if no candidate fits."
   [[ $choice == NONE ]] && return 0
   # Belt and braces: only ever return something that really was a candidate.
   (( ${candidates[(Ie)$choice]} )) && print -r -- "$choice"
+}
+
+# Has <word> ever appeared as a word of a command in history?
+_zsh_autocompllama_known_word() {
+  local w=$1
+  if (( $+functions[_histdb_query] )); then
+    [[ -n $(_histdb_query "select 1 from commands where instr(' ' || commands.argv || ' ', ' $(sql_escape "$w") ') > 0 limit 1") ]] && return 0
+  fi
+  local -a lines
+  lines=( ${(f)"$(_zsh_autocompllama_plain_history)"} )
+  (( ${#${(M)lines:#(*[[:space:]]|)${(b)w}([[:space:]]*|)}} ))
 }
 
 # Could this generated command plausibly run here? Two cheap checks that catch
@@ -394,8 +590,11 @@ _zsh_autocompllama_valid_command() {
   (( found_command ))
 }
 
-# Compute a suggestion for a partial command and print it. The result always
-# starts with the partial command. Pure with respect to the line editor so it
+# Compute a suggestion for a partial command and print it. Today the result
+# always starts with the partial command (the candidate query and the
+# fill-in-the-middle request both guarantee it); the line editor also
+# handles one that does not, by showing it as a rewrite. Pure with respect
+# to the line editor so it
 # can run outside ZLE (tests, background jobs). Returns 1 on errors and 2 when
 # there is simply nothing to suggest; both print a reason to stderr.
 _zsh_autocompllama_complete() {
@@ -408,6 +607,18 @@ _zsh_autocompllama_complete() {
   candidates=( ${(f)"$(_zsh_autocompllama_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES)"} )
   if (( $#candidates )); then
     completion=$(_zsh_autocompllama_pick "$partial" "${candidates[@]}") || return 1
+    if [[ -n $completion ]]; then
+      print -r -- "$completion"
+      return 0
+    fi
+  fi
+
+  # Second choice: the typed text may be mistyped; offer commands that nearly
+  # match it. A pick here does not continue the typed text, so the line
+  # editor shows it as a rewrite.
+  candidates=( ${(f)"$(_zsh_autocompllama_near_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_NEAR)"} )
+  if (( $#candidates )); then
+    completion=$(_zsh_autocompllama_pick -n "$partial" "${candidates[@]}") || return 1
     if [[ -n $completion ]]; then
       print -r -- "$completion"
       return 0
@@ -435,6 +646,23 @@ _zsh_autocompllama_complete() {
   if ! _zsh_autocompllama_valid_command "$completion"; then
     print -u2 -r -- "zsh-autocompllama: rejected suggestion (unknown command or path): $completion"
     return 2
+  fi
+  # When the model extends the word being typed (rather than adding words
+  # after it), the result must be a word that is known to make sense: used in
+  # a command before, a command name, an existing file, a flag, or something
+  # unverifiable like a URL, glob or variable. This stops a typo from being
+  # "completed" into a longer typo.
+  if [[ $partial != *[[:space:]] && $continuation != [[:space:]]* ]]; then
+    local word="${partial##*[[:space:]]}${continuation%%[[:space:]]*}"
+    case $word in
+      -*|*://*|*[\*\?\[\]\$\{=]*) ;;
+      *)
+        if ! { [[ -e ${~word} ]] || whence -w -- "$word" >/dev/null 2>&1 ||
+               _zsh_autocompllama_known_word "$word" }; then
+          print -u2 -r -- "zsh-autocompllama: rejected suggestion (unknown word '$word'): $completion"
+          return 2
+        fi ;;
+    esac
   fi
   print -r -- "$completion"
 }
@@ -512,6 +740,174 @@ _zsh_autocompllama_spinner_hide() {
   [[ $1 == noredraw ]] || zle reset-prompt
 }
 
+# A rewrite suggestion is shown on its own line below the buffer, lined up
+# with the typed command:
+#   ❯ git psuh
+#   ⇥ git push
+# The line lives in POSTDISPLAY (so it is drawn and redrawn by the line
+# editor) and is coloured with region_highlight entries tagged with a memo,
+# so only ours are ever removed. Unlike zsh-autosuggestions' grey text it is
+# never a suffix of the buffer, so it has its own accept key.
+typeset -g _ZSH_AUTOCOMPLLAMA_REPLACEMENT _ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT
+# Characters of the rewrite line (after its newline) before the command.
+typeset -gi _ZSH_AUTOCOMPLLAMA_REPLACEMENT_INDENT=0
+
+# Visible width of the last line of the prompt, i.e. the column the typed
+# command starts in: expand the prompt as the line editor does, keep its
+# last line and drop terminal escape sequences before measuring.
+_zsh_autocompllama_prompt_width() {
+  setopt localoptions extendedglob
+  local p
+  p=$(print -P -- "$PROMPT" 2>/dev/null)
+  p=${p##*$'\n'}
+  p=${p//$'\e'\[[0-9;?]#[a-zA-Z]/}
+  p=${p//$'\e'\][^$'\a']#$'\a'/}
+  p=${p//$'\e'[^\[\]]/}
+  REPLY=${(m)#p}
+}
+# Diff spans of the rewrite against the typed text: "a|b <start> <end> <style>"
+# with 0-based character offsets into the typed text (a) or the rewrite (b).
+typeset -ga _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS
+
+# Character-level diff of <a> against <b>, as spans in
+# _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS: characters of a that b drops
+# (REMOVED), characters of b that replace characters of a (CHANGED) and
+# characters b adds (ADDED). A minimal edit script from the usual
+# edit-distance table, read back from the end. Skipped for long pairs,
+# since this runs in the foreground.
+_zsh_autocompllama_diff_spans() {
+  local a=$1 b=$2 c
+  _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS=()
+  local -i la=$#a lb=$#b i j
+  local -i w=$(( lb + 1 ))
+  (( la * lb <= 6000 )) || return 0
+  local -a ca cb d
+  for (( i = 1; i <= la; i++ )); do c=$a[i]; ca[i]=$(( #c )); done
+  for (( j = 1; j <= lb; j++ )); do c=$b[j]; cb[j]=$(( #c )); done
+  # d[i*w + j + 1] is the distance between a[1,i] and b[1,j].
+  for (( j = 0; j <= lb; j++ )); do d[j+1]=$j; done
+  for (( i = 1; i <= la; i++ )); do
+    d[i*w+1]=$i
+    for (( j = 1; j <= lb; j++ )); do
+      if (( ca[i] == cb[j] )); then
+        d[i*w+j+1]=$(( d[(i-1)*w+j] ))
+      else
+        d[i*w+j+1]=$(( d[(i-1)*w+j] + 1 ))
+        (( d[(i-1)*w+j+1] + 1 < d[i*w+j+1] )) && d[i*w+j+1]=$(( d[(i-1)*w+j+1] + 1 ))
+        (( d[i*w+j] + 1 < d[i*w+j+1] )) && d[i*w+j+1]=$(( d[i*w+j] + 1 ))
+      fi
+    done
+  done
+  # Walk back from the end, marking each character of a as kept or
+  # dropped and each character of b as kept, changed or added.
+  local -a ka kb
+  i=$la; j=$lb
+  while (( i > 0 || j > 0 )); do
+    if (( i > 0 && j > 0 && ca[i] == cb[j] && d[i*w+j+1] == d[(i-1)*w+j] )); then
+      (( i--, j-- ))
+    elif (( i > 0 && j > 0 && d[i*w+j+1] == d[(i-1)*w+j] + 1 )); then
+      kb[j]=sub; (( i--, j-- ))
+    elif (( j > 0 && d[i*w+j+1] == d[i*w+j] + 1 )); then
+      kb[j]=ins; (( j-- ))
+    else
+      ka[i]=del; (( i-- ))
+    fi
+  done
+  # Then one span per run of the same mark, with 0-based offsets.
+  local -a spans
+  local -i s
+  for (( i = 1; i <= la; i++ )); do
+    [[ $ka[i] == del ]] || continue
+    s=$i
+    while [[ $ka[i+1] == del ]]; do (( i++ )); done
+    spans+=( "a $(( s - 1 )) $i $ZSH_AUTOCOMPLLAMA_STYLE_REMOVED" )
+  done
+  for (( j = 1; j <= lb; j++ )); do
+    [[ -n $kb[j] ]] || continue
+    s=$j
+    while [[ $kb[j+1] == $kb[s] ]]; do (( j++ )); done
+    if [[ $kb[s] == sub ]]; then
+      spans+=( "b $(( s - 1 )) $j $ZSH_AUTOCOMPLLAMA_STYLE_CHANGED" )
+    else
+      spans+=( "b $(( s - 1 )) $j $ZSH_AUTOCOMPLLAMA_STYLE_ADDED" )
+    fi
+  done
+  _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS=( "${spans[@]}" )
+}
+
+# Colour the rewrite line and the diff. Called after every widget while it
+# is showing, so our entries always come last and win over
+# zsh-autosuggestions' grey span (re-added after each widget) and the
+# syntax highlighting of the typed line.
+_zsh_autocompllama_replacement_highlight() {
+  region_highlight=( ${region_highlight:#*memo=zsh-autocompllama} )
+  [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT &&
+     $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]] || return 0
+  local -i start=$#BUFFER
+  local -i split=$(( start + 1 + _ZSH_AUTOCOMPLLAMA_REPLACEMENT_INDENT ))
+  local -i end=$(( start + $#_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT ))
+  local style=${ZSH_AUTOCOMPLLAMA_REPLACEMENT_STYLE:-${ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE:-fg=8}}
+  region_highlight+=(
+    "$start $split fg=$ZSH_AUTOCOMPLLAMA_SPINNER_COLOR memo=zsh-autocompllama"
+    "$split $end $style memo=zsh-autocompllama"
+  )
+  local span
+  local -a f
+  for span in "${_ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS[@]}"; do
+    f=( ${=span} )
+    [[ -n $f[4] ]] || continue
+    if [[ $f[1] == a ]]; then
+      region_highlight+=( "$f[2] $f[3] $f[4] memo=zsh-autocompllama" )
+    else
+      region_highlight+=( "$(( split + f[2] )) $(( split + f[3] )) $f[4] memo=zsh-autocompllama" )
+    fi
+  done
+}
+
+# Show <command> as a rewrite of the current buffer.
+_zsh_autocompllama_replacement_show() {
+  _ZSH_AUTOCOMPLLAMA_REPLACEMENT=$1
+  # Indent so the command sits under the typed one, prefix in the margin.
+  local prefix=$ZSH_AUTOCOMPLLAMA_REPLACEMENT_PREFIX
+  _zsh_autocompllama_prompt_width
+  local -i pad=$(( REPLY - ${(m)#prefix} ))
+  (( pad > 0 )) && prefix="${(l:pad:)}${prefix}"
+  _ZSH_AUTOCOMPLLAMA_REPLACEMENT_INDENT=$#prefix
+  _ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT=$'\n'"${prefix}$1"
+  _zsh_autocompllama_diff_spans "$BUFFER" "$1"
+  # Drop zsh-autosuggestions' grey text (and its highlight of it) first.
+  (( $+functions[_zsh_autosuggest_highlight_reset] )) && _zsh_autosuggest_highlight_reset
+  POSTDISPLAY=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT
+  _zsh_autocompllama_replacement_highlight
+  # This runs from an fd handler, where display changes do not appear on
+  # their own (see zle -F in zshzle(1)).
+  zle -R
+}
+
+# Take the rewrite line down, if it is up.
+_zsh_autocompllama_replacement_clear() {
+  [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT ]] || return 0
+  [[ $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]] && POSTDISPLAY=
+  region_highlight=( ${region_highlight:#*memo=zsh-autocompllama} )
+  _ZSH_AUTOCOMPLLAMA_REPLACEMENT= _ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT=
+  _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS=()
+}
+
+# Widget bound to the accept keys: put the rewrite in the buffer, but only
+# if it is what is on screen right now. Otherwise do whatever the key did
+# before (for the right arrow, move or accept grey text).
+_zsh_autocompllama_accept() {
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT &&
+        $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
+    BUFFER=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT
+    CURSOR=$#BUFFER
+    _zsh_autocompllama_replacement_clear
+    return 0
+  fi
+  _zsh_autocompllama_replacement_clear
+  zle ${_ZSH_AUTOCOMPLLAMA_ACCEPT_ORIG[$KEYS]:-forward-char} -- "$@"
+}
+
 # Drop any background request that is still running (or waiting to start).
 _zsh_autocompllama_cancel() {
   if [[ -n $_ZSH_AUTOCOMPLLAMA_FD ]]; then
@@ -575,7 +971,12 @@ _zsh_autocompllama_on_result() {
 
   case $line in
     OK\ *)
-      zle autosuggest-suggest -- "${line#OK }" ;;
+      local suggestion=${line#OK }
+      if [[ $suggestion == "$pending"* ]]; then
+        zle autosuggest-suggest -- "$suggestion"
+      else
+        _zsh_autocompllama_replacement_show "$suggestion"
+      fi ;;
     ERR\ *)
       _ZSH_AUTOCOMPLLAMA_BACKOFF_UNTIL=$(( EPOCHSECONDS + ZSH_AUTOCOMPLLAMA_BACKOFF ))
       zle -M "${line#ERR } (suggestions paused for ${ZSH_AUTOCOMPLLAMA_BACKOFF}s)" ;;
@@ -585,9 +986,32 @@ _zsh_autocompllama_on_result() {
 # zle-line-pre-redraw hook: schedule a suggestion when the line changed.
 _zsh_autocompllama_on_change() {
   (( $+widgets[autosuggest-suggest] )) || return 0
-  [[ $BUFFER == $_ZSH_AUTOCOMPLLAMA_LAST_BUFFER ]] && return 0
+  if [[ $BUFFER == $_ZSH_AUTOCOMPLLAMA_LAST_BUFFER ]]; then
+    # Cursor movement and the like. The rewrite line must stay exactly what
+    # the accept key would insert: if something emptied POSTDISPLAY under it
+    # (zsh-autosuggestions answering with no suggestion), put it back; if
+    # something else is showing there now, forget the rewrite.
+    if [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT ]]; then
+      if [[ -z $POSTDISPLAY ]]; then
+        POSTDISPLAY=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT
+      elif [[ $POSTDISPLAY != "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
+        _zsh_autocompllama_replacement_clear
+      fi
+    fi
+    _zsh_autocompllama_replacement_highlight
+    return 0
+  fi
+  # zsh-autosuggestions' accept widgets (right arrow, End) append whatever
+  # is in POSTDISPLAY to the buffer. If that was our rewrite line, the user
+  # meant to accept the rewrite: do that instead of leaving the mess.
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT &&
+        $BUFFER == *"$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
+    BUFFER=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT
+    CURSOR=$#BUFFER
+  fi
   _ZSH_AUTOCOMPLLAMA_LAST_BUFFER=$BUFFER
 
+  _zsh_autocompllama_replacement_clear
   _zsh_autocompllama_cancel
   (( EPOCHSECONDS >= _ZSH_AUTOCOMPLLAMA_BACKOFF_UNTIL )) || return 0
   (( $#BUFFER >= ZSH_AUTOCOMPLLAMA_MIN_CHARS && CURSOR == $#BUFFER )) || return 0
@@ -603,6 +1027,7 @@ _zsh_autocompllama_on_line_init() {
 }
 
 _zsh_autocompllama_on_line_finish() {
+  _zsh_autocompllama_replacement_clear
   _zsh_autocompllama_cancel noredraw
 }
 
@@ -610,6 +1035,23 @@ zmodload zsh/datetime zsh/system
 # The fd handler is installed with 'zle -F -w', which requires a widget.
 zle -N _zsh_autocompllama_on_result
 zle -N _zsh_autocompllama_on_tick
+zle -N _zsh_autocompllama_accept
+# Take over the accept keys in the insert keymaps, remembering what each did
+# so the widget can fall through to it.
+typeset -gA _ZSH_AUTOCOMPLLAMA_ACCEPT_ORIG
+() {
+  local key orig
+  for key in "${ZSH_AUTOCOMPLLAMA_ACCEPT_KEYS[@]}"; do
+    [[ -n $key ]] || continue
+    orig=${${(z)"$(bindkey -M emacs -- "$key")"}[-1]}
+    [[ $orig == (undefined-key|_zsh_autocompllama_accept|'') ]] && orig=forward-char
+    # $KEYS in the widget holds the sequence as typed, so store it under
+    # the real bytes (bindkey's ^[ is the escape character).
+    _ZSH_AUTOCOMPLLAMA_ACCEPT_ORIG+=( "${key//\^\[/$'\e'}" "$orig" )
+    bindkey -M emacs -- "$key" _zsh_autocompllama_accept
+    bindkey -M viins -- "$key" _zsh_autocompllama_accept
+  done
+}
 autoload -Uz add-zle-hook-widget
 add-zle-hook-widget zle-line-pre-redraw _zsh_autocompllama_on_change
 add-zle-hook-widget zle-line-init _zsh_autocompllama_on_line_init
