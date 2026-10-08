@@ -266,7 +266,7 @@ only decorate the same command; the owner/repo of the git remote and what
 the project can run (make targets, npm scripts, just recipes, compose
 services), both computed when you change directory and again only if one of
 those files changed; the directory, branch and file listing; and the last
-commands of this session, with exit status when one failed and directory
+commands of this session, marked when one failed and with the directory
 when it was elsewhere. Each card is capped, and the prompt token count and
 time of every request are logged, so the cost of a card can be seen rather
 than guessed. With `OLLAMA_NUM_PARALLEL=1`, a fill-in request evicts the
@@ -285,10 +285,14 @@ statement of the problem, with the tool's real subcommands when that was
 it, for a single corrected try; on the fill-in path it is simply dropped. A
 soft failure is shown, with the doubtful words underlined, except when the
 translated command reads its path arguments (cd, cat, ls, vim and the
-like): then the path was a guess, so the model is shown what the nearest
-existing directory contains (`_zsh_autocompllama_path_hint`) and gets the
-same single corrected try, which turns `cd ~/Programming/api-server` into
-`cd ~/Programming/api_server`.
+like): then the path was a guess. The same or a close name is first looked
+for higher up the tree (`_zsh_autocompllama_relocate`), which turns
+`cd ~/Programming/zsh-autocompLlama/api_server` into
+`cd ~/Programming/api_server` without a model call; failing that, the
+model is shown what the nearest existing directory contains
+(`_zsh_autocompllama_path_hint`) and gets the same single corrected try.
+Recent commands that failed are marked `# FAILED with exit N`, and the
+system message says never to suggest one again as it was.
 
 A result that starts with the typed text is handed to zsh-autosuggestions as
 grey suffix text. One that does not is a rewrite: it is drawn by the plugin

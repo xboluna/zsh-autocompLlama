@@ -175,7 +175,7 @@ _zsh_autocompllama_recent_commands() {
     local -a out
     local decorate="
       case when history.exit_status not in (0, 130) and history.exit_status is not null
-           then commands.argv || '  # exit ' || history.exit_status
+           then commands.argv || '  # FAILED with exit ' || history.exit_status
            else commands.argv end
       || case when places.dir != '$(sql_escape $PWD)'
               then '  # in ' || replace(places.dir, '$(sql_escape $HOME)', '~')
@@ -599,7 +599,8 @@ _zsh_autocompllama_context() {
 # prefix and a request only pays for its own task text. (The fill-in
 # request has a different shape and cannot share it.)
 _zsh_autocompllama_system() {
-  print -r -- "Context about the user's machine, project and shell session:"
+  print -r -- "Context about the user's machine, project and shell session. A recent command \
+marked '# FAILED' did not work; never suggest it again as it was."
   _zsh_autocompllama_context
 }
 
@@ -974,6 +975,49 @@ _zsh_autocompllama_path_hint() {
   REPLY="'$written' does not exist. $display contains: ${shown:-nothing}."
 }
 
+# A path that does not exist, relocated: the same (or a close) name found
+# under one of its ancestors, nearest first, up to the home directory. The
+# usual shape of a guessed path is the right name in the wrong branch of
+# the tree ('~/Programming/zsh-autocompLlama/api_server' for
+# '~/Programming/api_server'), which this fixes without asking the model.
+# Result in REPLY, written with ~ when under home. Returns 1 if nothing
+# close is found. Usage: _zsh_autocompllama_relocate <path as written> [dirs]
+# With 'dirs', only directories are considered.
+_zsh_autocompllama_relocate() {
+  setopt localoptions extendedglob nullglob
+  local written=$1 only_dirs=$2 path name dir best
+  path=${written#[\"\']}; path=${path%[\"\']}; path=${~path}
+  [[ $path == /* ]] || path=$PWD/$path
+  path=${path:a}
+  name=${path:t}
+  dir=${path:h}
+  local -a entries
+  local e
+  while [[ $dir == $HOME/* || $dir == $HOME ]]; do
+    if [[ -d $dir ]]; then
+      if [[ -n $only_dirs ]]; then entries=( $dir/*(/:t) ); else entries=( $dir/*(:t) ); fi
+      if (( ${entries[(Ie)$name]} )); then
+        best=$dir/$name
+      else
+        local -i d bestd=99
+        for e in "${entries[@]}"; do
+          _zsh_autocompllama_close_names "$name" "$e" || continue
+          _zsh_autocompllama_distance "${(L)name//[-_. ]/}" "${(L)e//[-_. ]/}"
+          (( REPLY < bestd )) && { bestd=$REPLY; best=$dir/$e; }
+        done
+      fi
+      if [[ -n $best && $best != $path ]]; then
+        REPLY=${best/#$HOME/\~}
+        return 0
+      fi
+      best=
+    fi
+    [[ $dir == $HOME ]] && break
+    dir=${dir:h}
+  done
+  return 1
+}
+
 # Is <b> a plausible correction of the name <a>: the same name up to case
 # and separators, one containing the other, or within two edits? Guards the
 # path repair against the model picking an unrelated entry.
@@ -1097,39 +1141,55 @@ _zsh_autocompllama_complete() {
       (( rc == 1 )) && REPLY="$problem then $REPLY"
     elif (( rc == 2 && ZSH_AUTOCOMPLLAMA_REPAIR )) && _zsh_autocompllama_reads_paths "$completion"; then
       # The command reads a path that is not there: the model guessed a
-      # name. Show it what the nearest existing directory holds and let it
-      # pick the real one. Same single extra round as above.
-      local first=$completion hint w
+      # name. First look for that name (or a close one) higher up the
+      # tree, which needs no model call. Failing that, show the model what
+      # the nearest existing directory holds and let it pick the real one,
+      # in the same single extra round that a hard failure gets.
+      local first=$completion hint w fixed=$completion
       local -a soft; soft=( "${reply[@]}" )
+      local only_dirs=
+      [[ ${${(z)completion}[1]} == cd ]] && only_dirs=dirs
       for w in "${soft[@]}"; do
-        _zsh_autocompllama_path_hint "$w"
-        hint+="${hint:+ }$REPLY"
+        _zsh_autocompllama_relocate "$w" $only_dirs && fixed=${fixed/"$w"/$REPLY}
       done
-      hint+=" Answer again with the entry from that list that matches what the user described, \
-or an empty string if none does."
-      # Take the correction only if it names something close to the guess:
-      # a model handed a listing may otherwise pick any entry at all.
-      local second ok=0
-      second=$(_zsh_autocompllama_intent "$partial" "$first" "$hint") || return 1
-      if [[ -n $second && $second != $trimmed && $second != $first ]]; then
-        local -a new_words; new_words=( ${(z)second} )
-        ok=1
-        for w in "${soft[@]}"; do
-          local close=0 nw
-          for nw in "${new_words[@]}"; do
-            _zsh_autocompllama_close_names "$w" "$nw" && { close=1; break; }
-          done
-          (( close )) || { ok=0; break; }
-        done
-      fi
-      if (( ok )); then
-        _zsh_autocompllama_check_translation "$second"
+      if [[ $fixed != $completion ]]; then
+        _zsh_autocompllama_check_translation "$fixed"
         case $? in
-          0|2) completion=$second; rc=$? ;;
-          *) reply=( "${soft[@]}" ) ;;
+          0) completion=$fixed; rc=0 ;;
+          2) completion=$fixed; rc=2; first=$fixed; soft=( "${reply[@]}" ) ;;
         esac
-      else
-        reply=( "${soft[@]}" )
+      fi
+      if (( rc == 2 )); then
+        for w in "${soft[@]}"; do
+          _zsh_autocompllama_path_hint "$w"
+          hint+="${hint:+ }$REPLY"
+        done
+        hint+=" Answer again with the entry from that list that matches what the user described, \
+or an empty string if none does."
+        # Take the correction only if it names something close to the guess:
+        # a model handed a listing may otherwise pick any entry at all.
+        local second ok=0
+        second=$(_zsh_autocompllama_intent "$partial" "$first" "$hint") || return 1
+        if [[ -n $second && $second != $trimmed && $second != $first ]]; then
+          local -a new_words; new_words=( ${(z)second} )
+          ok=1
+          for w in "${soft[@]}"; do
+            local close=0 nw
+            for nw in "${new_words[@]}"; do
+              _zsh_autocompllama_close_names "$w" "$nw" && { close=1; break; }
+            done
+            (( close )) || { ok=0; break; }
+          done
+        fi
+        if (( ok )); then
+          _zsh_autocompllama_check_translation "$second"
+          case $? in
+            0|2) completion=$second; rc=$? ;;
+            *) reply=( "${soft[@]}" ) ;;
+          esac
+        else
+          reply=( "${soft[@]}" )
+        fi
       fi
     fi
     if (( rc == 1 )); then
