@@ -1,0 +1,68 @@
+{
+  "kube_context": {
+    "description": "Switch the current kubectl context to a named cluster.",
+    "params": {"name": {"type": "string", "enum": ["dev", "staging", "prod-eu", "prod-us"], "description": "The context to switch to."}},
+    "required": ["name"]
+  },
+  "aws_profile": {
+    "description": "Set the active AWS profile for this shell.",
+    "params": {"name": {"type": "string", "enum": ["default", "plasmidsaurus-dev", "plasmidsaurus-prod"], "description": "The profile to use."}},
+    "required": ["name"]
+  },
+  "brew_service": {
+    "description": "Start, stop or restart a Homebrew service.",
+    "params": {
+      "action": {"type": "string", "enum": ["start", "stop", "restart"], "description": "What to do with the service."},
+      "service": {"type": "string", "enum": ["ollama", "postgresql@16", "redis", "nginx"], "description": "The service."}
+    },
+    "required": ["action", "service"]
+  },
+  "open_pr": {
+    "description": "Open the pull request for the current git branch in the browser.",
+    "params": {},
+    "required": []
+  },
+  "open_file": {
+    "description": "Open a file in the editor, optionally at a line number.",
+    "params": {
+      "path": {"type": "string", "description": "The file path."},
+      "line": {"type": "integer", "description": "The line number to jump to, if any."}
+    },
+    "required": ["path"]
+  },
+  "kill_port": {
+    "description": "Kill the process listening on a TCP port.",
+    "params": {"port": {"type": "integer", "description": "The port number."}},
+    "required": ["port"]
+  },
+  "show_port": {
+    "description": "Show which process is listening on a TCP port, without killing it.",
+    "params": {"port": {"type": "integer", "description": "The port number."}},
+    "required": ["port"]
+  },
+  "checkout_branch": {
+    "description": "Check out the git branch whose name contains the given text.",
+    "params": {"query": {"type": "string", "description": "Part of the branch name."}},
+    "required": ["query"]
+  },
+  "run_tests": {
+    "description": "Run this project's test suite.",
+    "params": {},
+    "required": []
+  },
+  "git_changes_since": {
+    "description": "Show what changed in this repository since a point in time.",
+    "params": {"since": {"type": "string", "description": "A time expression such as 'yesterday', 'last week' or '3 days ago'."}},
+    "required": ["since"]
+  },
+  "tail_service_log": {
+    "description": "Follow the log of a Homebrew service.",
+    "params": {"service": {"type": "string", "enum": ["ollama", "postgresql@16", "redis", "nginx"], "description": "The service."}},
+    "required": ["service"]
+  },
+  "disk_usage": {
+    "description": "Show what is taking up disk space in a directory.",
+    "params": {"path": {"type": "string", "description": "The directory; the current one if omitted."}},
+    "required": []
+  }
+}

@@ -1,0 +1,388 @@
+{"candidate": "q3b-schema", "text": "switch to the prod eu cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "kube_context", "got_args": {"name": "prod-eu"}, "ms": 655.7434169808403}
+{"candidate": "q3b-schema", "text": "use the staging kube context", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "kube_context", "got_args": {"name": "staging"}, "ms": 643.6542909941636}
+{"candidate": "q3b-schema", "text": "point kubectl at dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 791.1403329926543}
+{"candidate": "q3b-schema", "text": "change k8s context to prod us", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "kube_context", "got_args": {"name": "prod-us"}, "ms": 626.0079579951707}
+{"candidate": "q3b-schema", "text": "kubectl context staging please", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "kube_context", "got_args": {"name": "staging"}, "ms": 924.8327089881059}
+{"candidate": "q3b-schema", "text": "go to the us production cluster", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "kube_context", "got_args": {"name": "prod-us"}, "ms": 675.5079580179881}
+{"candidate": "q3b-schema", "text": "switch kube to dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 812.1111659856979}
+{"candidate": "q3b-schema", "text": "I need to be on the eu prod cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "kube_context", "got_args": {"name": "prod-eu"}, "ms": 698.928124998929}
+{"candidate": "q3b-schema", "text": "use the prod aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "prod-eu"}, "ms": 674.0107910009101}
+{"candidate": "q3b-schema", "text": "switch aws to the dev account", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 602.0387500175275}
+{"candidate": "q3b-schema", "text": "set aws profile to default", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 646.0168340126984}
+{"candidate": "q3b-schema", "text": "aws profile plasmidsaurus-dev", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 641.7962089763023}
+{"candidate": "q3b-schema", "text": "I want the production aws credentials", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "prod-eu"}, "ms": 692.3784590035211}
+{"candidate": "q3b-schema", "text": "go back to the default aws profile", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 590.0412079936359}
+{"candidate": "q3b-schema", "text": "use my dev aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 578.6275830178056}
+{"candidate": "q3b-schema", "text": "start postgres", "expected": "brew_service", "expected_args": {"action": "start", "service": "postgresql@16"}, "got": "brew_service", "got_args": {"action": "start", "service": "postgresql@16"}, "ms": 883.8901249982882}
+{"candidate": "q3b-schema", "text": "restart ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "brew_service", "got_args": {"action": "restart", "service": "ollama"}, "ms": 1034.9995830038097}
+{"candidate": "q3b-schema", "text": "stop redis", "expected": "brew_service", "expected_args": {"action": "stop", "service": "redis"}, "got": "brew_service", "got_args": {"action": "stop", "service": "redis"}, "ms": 1026.046042010421}
+{"candidate": "q3b-schema", "text": "bring nginx back up", "expected": "brew_service", "expected_args": {"action": "start", "service": "nginx"}, "got": "tail_service_log", "got_args": {"service": "nginx"}, "ms": 587.1217499952763}
+{"candidate": "q3b-schema", "text": "turn off the ollama service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "ollama"}, "got": "brew_service", "got_args": {"action": "stop", "service": "ollama"}, "ms": 1056.6621249890886}
+{"candidate": "q3b-schema", "text": "restart the postgres service", "expected": "brew_service", "expected_args": {"action": "restart", "service": "postgresql@16"}, "got": "brew_service", "got_args": {"action": "restart", "service": "postgresql@16"}, "ms": 1091.6905420017429}
+{"candidate": "q3b-schema", "text": "start the redis server", "expected": "brew_service", "expected_args": {"action": "start", "service": "redis"}, "got": "brew_service", "got_args": {"action": "start", "service": "redis"}, "ms": 809.0029160084669}
+{"candidate": "q3b-schema", "text": "kill nginx service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "nginx"}, "got": "kill_port", "got_args": {"port": 80}, "ms": 931.5580840047915}
+{"candidate": "q3b-schema", "text": "bounce ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "tail_service_log", "got_args": {"service": "ollama"}, "ms": 743.9141249924432}
+{"candidate": "q3b-schema", "text": "open the pr for this branch", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 583.9639169862494}
+{"candidate": "q3b-schema", "text": "show me my pull request in the browser", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 590.5636250099633}
+{"candidate": "q3b-schema", "text": "open this branch's PR", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 534.7339590080082}
+{"candidate": "q3b-schema", "text": "take me to the pull request", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 531.0412499820814}
+{"candidate": "q3b-schema", "text": "view the current pr on github", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 701.8825830018613}
+{"candidate": "q3b-schema", "text": "open the PR", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 579.6563749900088}
+{"candidate": "q3b-schema", "text": "open README.md in my editor", "expected": "open_file", "expected_args": {"path": "README.md"}, "got": "open_file", "got_args": {"path": "README.md"}, "ms": 676.2675000063609}
+{"candidate": "q3b-schema", "text": "edit install.sh at line 42", "expected": "open_file", "expected_args": {"path": "install.sh", "line": 42}, "got": "open_file", "got_args": {"path": "install.sh", "line": 42}, "ms": 887.6987079856917}
+{"candidate": "q3b-schema", "text": "open src/main.py line 120", "expected": "open_file", "expected_args": {"path": "src/main.py", "line": 120}, "got": "open_file", "got_args": {"path": "src/main.py", "line": 120}, "ms": 903.5625839896966}
+{"candidate": "q3b-schema", "text": "jump to line 7 of Makefile", "expected": "open_file", "expected_args": {"path": "Makefile", "line": 7}, "got": "open_file", "got_args": {"path": "Makefile", "line": 7}, "ms": 848.4733749937732}
+{"candidate": "q3b-schema", "text": "open up config.yaml", "expected": "open_file", "expected_args": {"path": "config.yaml"}, "got": "open_file", "got_args": {"path": "config.yaml"}, "ms": 651.477374980459}
+{"candidate": "q3b-schema", "text": "edit the file zsh-autocompllama.zsh around line 300", "expected": "open_file", "expected_args": {"path": "zsh-autocompllama.zsh", "line": 300}, "got": "open_file", "got_args": {"path": "zsh-autocompllama.zsh", "line": 300}, "ms": 1133.1131669867318}
+{"candidate": "q3b-schema", "text": "open package.json", "expected": "open_file", "expected_args": {"path": "package.json"}, "got": "open_file", "got_args": {"path": "package.json"}, "ms": 761.2557919928804}
+{"candidate": "q3b-schema", "text": "kill whatever is on port 8080", "expected": "kill_port", "expected_args": {"port": 8080}, "got": "kill_port", "got_args": {"port": 8080}, "ms": 685.7174999895506}
+{"candidate": "q3b-schema", "text": "kill the process on port 3000", "expected": "kill_port", "expected_args": {"port": 3000}, "got": "kill_port", "got_args": {"port": 3000}, "ms": 672.8014159889426}
+{"candidate": "q3b-schema", "text": "something is hogging port 5432, kill it", "expected": "kill_port", "expected_args": {"port": 5432}, "got": "kill_port", "got_args": {"port": 5432}, "ms": 638.1614580168389}
+{"candidate": "q3b-schema", "text": "free up port 8000", "expected": "kill_port", "expected_args": {"port": 8000}, "got": "kill_port", "got_args": {"port": 8000}, "ms": 647.4054999998771}
+{"candidate": "q3b-schema", "text": "stop the thing listening on 4000", "expected": "kill_port", "expected_args": {"port": 4000}, "got": "kill_port", "got_args": {"port": 4000}, "ms": 659.8980420094449}
+{"candidate": "q3b-schema", "text": "terminate the server on port 5173", "expected": "kill_port", "expected_args": {"port": 5173}, "got": "kill_port", "got_args": {"port": 5173}, "ms": 659.4555420160759}
+{"candidate": "q3b-schema", "text": "port 9000 kill", "expected": "kill_port", "expected_args": {"port": 9000}, "got": "kill_port", "got_args": {"port": 9000}, "ms": 660.9748330083676}
+{"candidate": "q3b-schema", "text": "what's running on port 3000", "expected": "show_port", "expected_args": {"port": 3000}, "got": "show_port", "got_args": {"port": 3000}, "ms": 670.0890839856584}
+{"candidate": "q3b-schema", "text": "who is using port 8080", "expected": "show_port", "expected_args": {"port": 8080}, "got": "show_port", "got_args": {"port": 8080}, "ms": 939.6988329826854}
+{"candidate": "q3b-schema", "text": "which process has port 5432", "expected": "show_port", "expected_args": {"port": 5432}, "got": "show_port", "got_args": {"port": 5432}, "ms": 919.2876250017434}
+{"candidate": "q3b-schema", "text": "is anything listening on 4000", "expected": "show_port", "expected_args": {"port": 4000}, "got": "show_port", "got_args": {"port": 4000}, "ms": 1062.0698750135489}
+{"candidate": "q3b-schema", "text": "show me what's on port 11434", "expected": "show_port", "expected_args": {"port": 11434}, "got": "show_port", "got_args": {"port": 11434}, "ms": 796.2128749932162}
+{"candidate": "q3b-schema", "text": "check port 8000", "expected": "show_port", "expected_args": {"port": 8000}, "got": "show_port", "got_args": {"port": 8000}, "ms": 773.1354999996256}
+{"candidate": "q3b-schema", "text": "checkout the feature branch for the installer", "expected": "checkout_branch", "expected_args": {"query": "installer"}, "got": "checkout_branch", "got_args": {"query": "feature"}, "ms": 626.7100420081988}
+{"candidate": "q3b-schema", "text": "switch to the branch with pages in the name", "expected": "checkout_branch", "expected_args": {"query": "pages"}, "got": "checkout_branch", "got_args": {"query": "pages"}, "ms": 641.2984160124324}
+{"candidate": "q3b-schema", "text": "go to the cli branch", "expected": "checkout_branch", "expected_args": {"query": "cli"}, "got": "checkout_branch", "got_args": {"query": "cli"}, "ms": 842.5487499916926}
+{"candidate": "q3b-schema", "text": "check out the branch about path repair", "expected": "checkout_branch", "expected_args": {"query": "path-repair"}, "got": "checkout_branch", "got_args": {"query": "path repair"}, "ms": 684.4024579913821}
+{"candidate": "q3b-schema", "text": "switch git branch to main", "expected": "checkout_branch", "expected_args": {"query": "main"}, "got": "checkout_branch", "got_args": {"query": "main"}, "ms": 614.7456659819}
+{"candidate": "q3b-schema", "text": "jump to the trailing space fix branch", "expected": "checkout_branch", "expected_args": {"query": "trailing-space"}, "got": "checkout_branch", "got_args": {"query": "trailing space fix"}, "ms": 693.5588750056922}
+{"candidate": "q3b-schema", "text": "checkout the intent suggestions branch", "expected": "checkout_branch", "expected_args": {"query": "intent"}, "got": "checkout_branch", "got_args": {"query": "intent suggestions"}, "ms": 619.9882079963572}
+{"candidate": "q3b-schema", "text": "run the tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 549.2334160080645}
+{"candidate": "q3b-schema", "text": "run this project's test suite", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 468.3464579866268}
+{"candidate": "q3b-schema", "text": "test it", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 558.536833996186}
+{"candidate": "q3b-schema", "text": "kick off the tests please", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 499.7926249925513}
+{"candidate": "q3b-schema", "text": "execute the unit tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 523.335167003097}
+{"candidate": "q3b-schema", "text": "run tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 526.8188329937402}
+{"candidate": "q3b-schema", "text": "what changed since yesterday", "expected": "git_changes_since", "expected_args": {"since": "yesterday"}, "got": "git_changes_since", "got_args": {"since": "yesterday"}, "ms": 753.4067499800585}
+{"candidate": "q3b-schema", "text": "show me the changes from the last week", "expected": "git_changes_since", "expected_args": {"since": "last week"}, "got": "git_changes_since", "got_args": {"since": "last week"}, "ms": 693.1771250092424}
+{"candidate": "q3b-schema", "text": "what did we change in the last 3 days", "expected": "git_changes_since", "expected_args": {"since": "3 days ago"}, "got": "git_changes_since", "got_args": {"since": "3 days ago"}, "ms": 719.2513330082875}
+{"candidate": "q3b-schema", "text": "diff since this morning", "expected": "git_changes_since", "expected_args": {"since": "this morning"}, "got": "git_changes_since", "got_args": {"since": "this morning"}, "ms": 690.4701669991482}
+{"candidate": "q3b-schema", "text": "what's new in this repo since monday", "expected": "git_changes_since", "expected_args": {"since": "monday"}, "got": "git_changes_since", "got_args": {"since": "monday"}, "ms": 877.9609999910463}
+{"candidate": "q3b-schema", "text": "changes since last month", "expected": "git_changes_since", "expected_args": {"since": "last month"}, "got": "git_changes_since", "got_args": {"since": "last month"}, "ms": 709.6836670243647}
+{"candidate": "q3b-schema", "text": "tail the ollama log", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "tail_service_log", "got_args": {"service": "ollama"}, "ms": 696.2279170111287}
+{"candidate": "q3b-schema", "text": "follow the postgres logs", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "tail_service_log", "got_args": {"service": "postgresql@16"}, "ms": 834.5135000126902}
+{"candidate": "q3b-schema", "text": "show me the redis log live", "expected": "tail_service_log", "expected_args": {"service": "redis"}, "got": "tail_service_log", "got_args": {"service": "redis"}, "ms": 771.5795830008574}
+{"candidate": "q3b-schema", "text": "watch nginx logs", "expected": "tail_service_log", "expected_args": {"service": "nginx"}, "got": "tail_service_log", "got_args": {"service": "nginx"}, "ms": 774.0672079962678}
+{"candidate": "q3b-schema", "text": "what is ollama logging", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "tail_service_log", "got_args": {"service": "ollama"}, "ms": 767.1261250216048}
+{"candidate": "q3b-schema", "text": "stream the postgresql log", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "tail_service_log", "got_args": {"service": "postgresql@16"}, "ms": 722.5086659891531}
+{"candidate": "q3b-schema", "text": "what's taking up space here", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "."}, "ms": 585.8021659951191}
+{"candidate": "q3b-schema", "text": "disk usage of this directory", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "this directory"}, "ms": 695.2392499952111}
+{"candidate": "q3b-schema", "text": "what is eating my disk in ~/Downloads", "expected": "disk_usage", "expected_args": {"path": "~/Downloads"}, "got": "disk_usage", "got_args": {"path": "~/Downloads"}, "ms": 789.4401669909712}
+{"candidate": "q3b-schema", "text": "show the biggest things in /var/log", "expected": "disk_usage", "expected_args": {"path": "/var/log"}, "got": "disk_usage", "got_args": {"path": "/var/log"}, "ms": 644.1062910016626}
+{"candidate": "q3b-schema", "text": "how much space is this folder using", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "this folder"}, "ms": 622.5387499725912}
+{"candidate": "q3b-schema", "text": "where did my disk space go", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "."}, "ms": 559.3156670220196}
+{"candidate": "q3b-schema", "text": "git status", "expected": "none", "expected_args": {}, "got": "git_changes_since", "got_args": {"since": "HEAD"}, "ms": 690.9577920159791}
+{"candidate": "q3b-schema", "text": "ls -la", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 509.87233300111257}
+{"candidate": "q3b-schema", "text": "gti pus", "expected": "none", "expected_args": {}, "got": "git_changes_since", "got_args": {"since": "HEAD"}, "ms": 716.9130829861388}
+{"candidate": "q3b-schema", "text": "docker ps -a", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 495.4301659890916}
+{"candidate": "q3b-schema", "text": "convert this mp4 to a gif", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 498.6989159951918}
+{"candidate": "q3b-schema", "text": "what's the weather like", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 428.6865000030957}
+{"candidate": "q3b-schema", "text": "write a haiku about zsh", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 499.82850000378676}
+{"candidate": "q3b-schema", "text": "undo my last commit but keep the changes", "expected": "none", "expected_args": {}, "got": "git_changes_since", "got_args": {"since": "HEAD~1"}, "ms": 724.1799579933286}
+{"candidate": "q3b-schema", "text": "cd to my api server dir", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 451.6167500114534}
+{"candidate": "q3b-schema", "text": "compress the logs folder into a tarball", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 465.2668749913573}
+{"candidate": "q3b-schema", "text": "rename all the png files to jpg", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 468.989666987909}
+{"candidate": "q3b-schema", "text": "ssh into the build box", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 432.3406250041444}
+{"candidate": "q3b-schema", "text": "how many lines are in this file", "expected": "none", "expected_args": {}, "got": "show_port", "got_args": {"port": 80}, "ms": 589.5418340223841}
+{"candidate": "q3b-schema", "text": "delete everything in node_modules", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 434.35033300193027}
+{"candidate": "q3b-schema", "text": "show the last 5 commits", "expected": "none", "expected_args": {}, "got": "git_changes_since", "got_args": {"since": "HEAD~5"}, "ms": 666.9394999917131}
+{"candidate": "q3b-schema", "text": "pull from this git repo", "expected": "none", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 475.35233400412835}
+{"candidate": "q06-schema", "text": "switch to the prod eu cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "kube_context", "got_args": {"name": "prod-eu"}, "ms": 200.97845798591152}
+{"candidate": "q06-schema", "text": "use the staging kube context", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "kube_context", "got_args": {"name": "staging"}, "ms": 186.62949997815304}
+{"candidate": "q06-schema", "text": "point kubectl at dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 192.68316598027013}
+{"candidate": "q06-schema", "text": "change k8s context to prod us", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "kube_context", "got_args": {"name": "prod-us"}, "ms": 173.463167011505}
+{"candidate": "q06-schema", "text": "kubectl context staging please", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "kube_context", "got_args": {"name": "staging"}, "ms": 186.4508749858942}
+{"candidate": "q06-schema", "text": "go to the us production cluster", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "kube_context", "got_args": {"name": "prod-us"}, "ms": 184.66320898733102}
+{"candidate": "q06-schema", "text": "switch kube to dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 171.17741701076739}
+{"candidate": "q06-schema", "text": "I need to be on the eu prod cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "kube_context", "got_args": {"name": "prod-eu"}, "ms": 187.02387498342432}
+{"candidate": "q06-schema", "text": "use the prod aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "prod-eu"}, "ms": 190.7538750092499}
+{"candidate": "q06-schema", "text": "switch aws to the dev account", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 194.59970798925497}
+{"candidate": "q06-schema", "text": "set aws profile to default", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 208.29670800594613}
+{"candidate": "q06-schema", "text": "aws profile plasmidsaurus-dev", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "prod-eu"}, "ms": 216.19358399766497}
+{"candidate": "q06-schema", "text": "I want the production aws credentials", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "prod-eu"}, "ms": 221.28295799484476}
+{"candidate": "q06-schema", "text": "go back to the default aws profile", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 199.26925000618212}
+{"candidate": "q06-schema", "text": "use my dev aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 202.23712499137037}
+{"candidate": "q06-schema", "text": "start postgres", "expected": "brew_service", "expected_args": {"action": "start", "service": "postgresql@16"}, "got": "brew_service", "got_args": {"service": "postgresql@16", "port": 5000}, "ms": 309.30274998536333}
+{"candidate": "q06-schema", "text": "restart ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "brew_service", "got_args": {"action": "restart", "service": "ollama"}, "ms": 304.24900000798516}
+{"candidate": "q06-schema", "text": "stop redis", "expected": "brew_service", "expected_args": {"action": "stop", "service": "redis"}, "got": "kill_port", "got_args": {"port": 64434}, "ms": 253.3497079857625}
+{"candidate": "q06-schema", "text": "bring nginx back up", "expected": "brew_service", "expected_args": {"action": "start", "service": "nginx"}, "got": "none", "got_args": {}, "ms": 146.20683298562653}
+{"candidate": "q06-schema", "text": "turn off the ollama service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "ollama"}, "got": "none", "got_args": {}, "ms": 142.88724999642}
+{"candidate": "q06-schema", "text": "restart the postgres service", "expected": "brew_service", "expected_args": {"action": "restart", "service": "postgresql@16"}, "got": "brew_service", "got_args": {"action": "restart", "service": "postgresql@16"}, "ms": 306.68816599063575}
+{"candidate": "q06-schema", "text": "start the redis server", "expected": "brew_service", "expected_args": {"action": "start", "service": "redis"}, "got": "brew_service", "got_args": {"service": "redis"}, "ms": 202.7707920060493}
+{"candidate": "q06-schema", "text": "kill nginx service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "nginx"}, "got": "kill_port", "got_args": {"port": 80}, "ms": 207.3255830036942}
+{"candidate": "q06-schema", "text": "bounce ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "none", "got_args": {}, "ms": 147.77062498615123}
+{"candidate": "q06-schema", "text": "open the pr for this branch", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {"query": "this branch"}, "ms": 199.93787500425242}
+{"candidate": "q06-schema", "text": "show me my pull request in the browser", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {"query": "my pull request"}, "ms": 195.28420799179003}
+{"candidate": "q06-schema", "text": "open this branch's PR", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {"query": "this branch's PR"}, "ms": 231.5832500171382}
+{"candidate": "q06-schema", "text": "take me to the pull request", "expected": "open_pr", "expected_args": {}, "got": "none", "got_args": {}, "ms": 141.35554200038314}
+{"candidate": "q06-schema", "text": "view the current pr on github", "expected": "open_pr", "expected_args": {}, "got": "none", "got_args": {}, "ms": 140.45579201774672}
+{"candidate": "q06-schema", "text": "open the PR", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 140.20095899468288}
+{"candidate": "q06-schema", "text": "open README.md in my editor", "expected": "open_file", "expected_args": {"path": "README.md"}, "got": "open_file", "got_args": {"path": "README.md"}, "ms": 195.03437500679865}
+{"candidate": "q06-schema", "text": "edit install.sh at line 42", "expected": "open_file", "expected_args": {"path": "install.sh", "line": 42}, "got": "open_file", "got_args": {"path": "install.sh", "line": 42}, "ms": 260.9049159800634}
+{"candidate": "q06-schema", "text": "open src/main.py line 120", "expected": "open_file", "expected_args": {"path": "src/main.py", "line": 120}, "got": "open_file", "got_args": {"path": "src/main.py", "line": 120}, "ms": 280.18208302091807}
+{"candidate": "q06-schema", "text": "jump to line 7 of Makefile", "expected": "open_file", "expected_args": {"path": "Makefile", "line": 7}, "got": "open_file", "got_args": {"path": "Makefile", "line": 7}, "ms": 254.78375001694076}
+{"candidate": "q06-schema", "text": "open up config.yaml", "expected": "open_file", "expected_args": {"path": "config.yaml"}, "got": "open_file", "got_args": {"path": "/config.yaml"}, "ms": 212.57612502085976}
+{"candidate": "q06-schema", "text": "edit the file zsh-autocompllama.zsh around line 300", "expected": "open_file", "expected_args": {"path": "zsh-autocompllama.zsh", "line": 300}, "got": "open_file", "got_args": {"path": "zsh-autocompllama.zsh", "line": 300}, "ms": 852.6880000135861}
+{"candidate": "q06-schema", "text": "open package.json", "expected": "open_file", "expected_args": {"path": "package.json"}, "got": "open_file", "got_args": {"path": "/package.json"}, "ms": 476.09112499048933}
+{"candidate": "q06-schema", "text": "kill whatever is on port 8080", "expected": "kill_port", "expected_args": {"port": 8080}, "got": "kill_port", "got_args": {"port": 8080}, "ms": 1126.1689999955706}
+{"candidate": "q06-schema", "text": "kill the process on port 3000", "expected": "kill_port", "expected_args": {"port": 3000}, "got": "kill_port", "got_args": {"port": 3000}, "ms": 656.324624986155}
+{"candidate": "q06-schema", "text": "something is hogging port 5432, kill it", "expected": "kill_port", "expected_args": {"port": 5432}, "got": "kill_port", "got_args": {"port": 5432}, "ms": 253.36341702495702}
+{"candidate": "q06-schema", "text": "free up port 8000", "expected": "kill_port", "expected_args": {"port": 8000}, "got": "kill_port", "got_args": {"port": 8000}, "ms": 287.7928329980932}
+{"candidate": "q06-schema", "text": "stop the thing listening on 4000", "expected": "kill_port", "expected_args": {"port": 4000}, "got": "kill_port", "got_args": {"port": 4000}, "ms": 327.6270409987774}
+{"candidate": "q06-schema", "text": "terminate the server on port 5173", "expected": "kill_port", "expected_args": {"port": 5173}, "got": "kill_port", "got_args": {"port": 5173}, "ms": 224.61066601681523}
+{"candidate": "q06-schema", "text": "port 9000 kill", "expected": "kill_port", "expected_args": {"port": 9000}, "got": "kill_port", "got_args": {"port": 9000}, "ms": 276.4217079966329}
+{"candidate": "q06-schema", "text": "what's running on port 3000", "expected": "show_port", "expected_args": {"port": 3000}, "got": "kill_port", "got_args": {"port": 3000}, "ms": 223.06995899998583}
+{"candidate": "q06-schema", "text": "who is using port 8080", "expected": "show_port", "expected_args": {"port": 8080}, "got": "none", "got_args": {}, "ms": 170.54791701957583}
+{"candidate": "q06-schema", "text": "which process has port 5432", "expected": "show_port", "expected_args": {"port": 5432}, "got": "kill_port", "got_args": {"port": 5432}, "ms": 287.4952080019284}
+{"candidate": "q06-schema", "text": "is anything listening on 4000", "expected": "show_port", "expected_args": {"port": 4000}, "got": "kill_port", "got_args": {"port": 4000}, "ms": 242.78616599622183}
+{"candidate": "q06-schema", "text": "show me what's on port 11434", "expected": "show_port", "expected_args": {"port": 11434}, "got": "show_port", "got_args": {"port": 11434}, "ms": 228.66362499189563}
+{"candidate": "q06-schema", "text": "check port 8000", "expected": "show_port", "expected_args": {"port": 8000}, "got": "kill_port", "got_args": {"port": 8000}, "ms": 313.01624997286126}
+{"candidate": "q06-schema", "text": "checkout the feature branch for the installer", "expected": "checkout_branch", "expected_args": {"query": "installer"}, "got": "checkout_branch", "got_args": {"query": "installer"}, "ms": 349.1549579775892}
+{"candidate": "q06-schema", "text": "switch to the branch with pages in the name", "expected": "checkout_branch", "expected_args": {"query": "pages"}, "got": "none", "got_args": {}, "ms": 186.370084004011}
+{"candidate": "q06-schema", "text": "go to the cli branch", "expected": "checkout_branch", "expected_args": {"query": "cli"}, "got": "none", "got_args": {}, "ms": 244.86854099086486}
+{"candidate": "q06-schema", "text": "check out the branch about path repair", "expected": "checkout_branch", "expected_args": {"query": "path-repair"}, "got": "none", "got_args": {}, "ms": 140.8482079859823}
+{"candidate": "q06-schema", "text": "switch git branch to main", "expected": "checkout_branch", "expected_args": {"query": "main"}, "got": "none", "got_args": {}, "ms": 158.9602919993922}
+{"candidate": "q06-schema", "text": "jump to the trailing space fix branch", "expected": "checkout_branch", "expected_args": {"query": "trailing-space"}, "got": "none", "got_args": {}, "ms": 140.60250000329688}
+{"candidate": "q06-schema", "text": "checkout the intent suggestions branch", "expected": "checkout_branch", "expected_args": {"query": "intent"}, "got": "checkout_branch", "got_args": {"query": "intent suggestions"}, "ms": 191.85058400034904}
+{"candidate": "q06-schema", "text": "run the tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 143.16258401959203}
+{"candidate": "q06-schema", "text": "run this project's test suite", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 149.01883399579674}
+{"candidate": "q06-schema", "text": "test it", "expected": "run_tests", "expected_args": {}, "got": "none", "got_args": {}, "ms": 136.5010000008624}
+{"candidate": "q06-schema", "text": "kick off the tests please", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 148.93737499369308}
+{"candidate": "q06-schema", "text": "execute the unit tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 151.20258298702538}
+{"candidate": "q06-schema", "text": "run tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 184.58816700149328}
+{"candidate": "q06-schema", "text": "what changed since yesterday", "expected": "git_changes_since", "expected_args": {"since": "yesterday"}, "got": "none", "got_args": {}, "ms": 365.54441699991}
+{"candidate": "q06-schema", "text": "show me the changes from the last week", "expected": "git_changes_since", "expected_args": {"since": "last week"}, "got": "none", "got_args": {}, "ms": 156.21741701033898}
+{"candidate": "q06-schema", "text": "what did we change in the last 3 days", "expected": "git_changes_since", "expected_args": {"since": "3 days ago"}, "got": "none", "got_args": {}, "ms": 146.01687499089167}
+{"candidate": "q06-schema", "text": "diff since this morning", "expected": "git_changes_since", "expected_args": {"since": "this morning"}, "got": "none", "got_args": {}, "ms": 165.83645800710656}
+{"candidate": "q06-schema", "text": "what's new in this repo since monday", "expected": "git_changes_since", "expected_args": {"since": "monday"}, "got": "none", "got_args": {}, "ms": 144.78758399491198}
+{"candidate": "q06-schema", "text": "changes since last month", "expected": "git_changes_since", "expected_args": {"since": "last month"}, "got": "none", "got_args": {}, "ms": 312.6232080103364}
+{"candidate": "q06-schema", "text": "tail the ollama log", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "tail_service_log", "got_args": {"service": "ollama"}, "ms": 318.16608298686333}
+{"candidate": "q06-schema", "text": "follow the postgres logs", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "tail_service_log", "got_args": {"service": "postgresql@16"}, "ms": 328.76645799842663}
+{"candidate": "q06-schema", "text": "show me the redis log live", "expected": "tail_service_log", "expected_args": {"service": "redis"}, "got": "none", "got_args": {}, "ms": 151.21683300822042}
+{"candidate": "q06-schema", "text": "watch nginx logs", "expected": "tail_service_log", "expected_args": {"service": "nginx"}, "got": "none", "got_args": {}, "ms": 134.3702080193907}
+{"candidate": "q06-schema", "text": "what is ollama logging", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "none", "got_args": {}, "ms": 146.97649999288842}
+{"candidate": "q06-schema", "text": "stream the postgresql log", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "none", "got_args": {}, "ms": 139.7240420046728}
+{"candidate": "q06-schema", "text": "what's taking up space here", "expected": "disk_usage", "expected_args": {}, "got": "none", "got_args": {}, "ms": 137.28662498760968}
+{"candidate": "q06-schema", "text": "disk usage of this directory", "expected": "disk_usage", "expected_args": {}, "got": "none", "got_args": {}, "ms": 142.47120800428092}
+{"candidate": "q06-schema", "text": "what is eating my disk in ~/Downloads", "expected": "disk_usage", "expected_args": {"path": "~/Downloads"}, "got": "none", "got_args": {}, "ms": 148.63529198919423}
+{"candidate": "q06-schema", "text": "show the biggest things in /var/log", "expected": "disk_usage", "expected_args": {"path": "/var/log"}, "got": "none", "got_args": {}, "ms": 183.7832500168588}
+{"candidate": "q06-schema", "text": "how much space is this folder using", "expected": "disk_usage", "expected_args": {}, "got": "none", "got_args": {}, "ms": 162.09233397967182}
+{"candidate": "q06-schema", "text": "where did my disk space go", "expected": "disk_usage", "expected_args": {}, "got": "none", "got_args": {}, "ms": 197.93454100727104}
+{"candidate": "q06-schema", "text": "git status", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 201.59833299112506}
+{"candidate": "q06-schema", "text": "ls -la", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 190.01600000774488}
+{"candidate": "q06-schema", "text": "gti pus", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 204.7160829824861}
+{"candidate": "q06-schema", "text": "docker ps -a", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 210.08775001973845}
+{"candidate": "q06-schema", "text": "convert this mp4 to a gif", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 205.23408299777657}
+{"candidate": "q06-schema", "text": "what's the weather like", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 188.68824999663047}
+{"candidate": "q06-schema", "text": "write a haiku about zsh", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 184.5280000125058}
+{"candidate": "q06-schema", "text": "undo my last commit but keep the changes", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 202.8736670035869}
+{"candidate": "q06-schema", "text": "cd to my api server dir", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 255.86379200103693}
+{"candidate": "q06-schema", "text": "compress the logs folder into a tarball", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 205.52091600256972}
+{"candidate": "q06-schema", "text": "rename all the png files to jpg", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 205.3252499899827}
+{"candidate": "q06-schema", "text": "ssh into the build box", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 212.55366600234993}
+{"candidate": "q06-schema", "text": "how many lines are in this file", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 253.6149170191493}
+{"candidate": "q06-schema", "text": "delete everything in node_modules", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 344.5249169890303}
+{"candidate": "q06-schema", "text": "show the last 5 commits", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 343.6851669976022}
+{"candidate": "q06-schema", "text": "pull from this git repo", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 411.0423749953043}
+{"candidate": "tev1-dec", "text": "switch to the prod eu cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "brew_service", "got_args": {"action": "restart", "service": "nginx"}, "ms": 686.5964579919819}
+{"candidate": "tev1-dec", "text": "use the staging kube context", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "none", "got_args": {}, "ms": 658.1029579974711}
+{"candidate": "tev1-dec", "text": "point kubectl at dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 672.8608339908533}
+{"candidate": "tev1-dec", "text": "change k8s context to prod us", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "open_pr", "got_args": {}, "ms": 687.3559999803547}
+{"candidate": "tev1-dec", "text": "kubectl context staging please", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 672.3304170009214}
+{"candidate": "tev1-dec", "text": "go to the us production cluster", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "none", "got_args": {}, "ms": 676.5056250151247}
+{"candidate": "tev1-dec", "text": "switch kube to dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 676.419709023321}
+{"candidate": "tev1-dec", "text": "I need to be on the eu prod cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "brew_service", "got_args": {"action": "restart", "service": "nginx"}, "ms": 669.5880420156755}
+{"candidate": "tev1-dec", "text": "use the prod aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-prod"}, "ms": 662.7438750001602}
+{"candidate": "tev1-dec", "text": "switch aws to the dev account", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 681.2738330045249}
+{"candidate": "tev1-dec", "text": "set aws profile to default", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "default"}, "ms": 680.9990000037942}
+{"candidate": "tev1-dec", "text": "aws profile plasmidsaurus-dev", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 690.652624994982}
+{"candidate": "tev1-dec", "text": "I want the production aws credentials", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 650.1179579936434}
+{"candidate": "tev1-dec", "text": "go back to the default aws profile", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "default"}, "ms": 672.159957990516}
+{"candidate": "tev1-dec", "text": "use my dev aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 646.1891249928158}
+{"candidate": "tev1-dec", "text": "start postgres", "expected": "brew_service", "expected_args": {"action": "start", "service": "postgresql@16"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 664.7632919775788}
+{"candidate": "tev1-dec", "text": "restart ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "brew_service", "got_args": {"action": "restart", "service": "ollama"}, "ms": 683.9736249821726}
+{"candidate": "tev1-dec", "text": "stop redis", "expected": "brew_service", "expected_args": {"action": "stop", "service": "redis"}, "got": "brew_service", "got_args": {"action": "restart", "service": "redis"}, "ms": 667.8416669892613}
+{"candidate": "tev1-dec", "text": "bring nginx back up", "expected": "brew_service", "expected_args": {"action": "start", "service": "nginx"}, "got": "open_pr", "got_args": {}, "ms": 693.459291011095}
+{"candidate": "tev1-dec", "text": "turn off the ollama service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "ollama"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 862.8964589734096}
+{"candidate": "tev1-dec", "text": "restart the postgres service", "expected": "brew_service", "expected_args": {"action": "restart", "service": "postgresql@16"}, "got": "brew_service", "got_args": {"action": "restart", "service": "postgresql@16"}, "ms": 735.5695409933105}
+{"candidate": "tev1-dec", "text": "start the redis server", "expected": "brew_service", "expected_args": {"action": "start", "service": "redis"}, "got": "brew_service", "got_args": {"action": "restart", "service": "redis"}, "ms": 886.7822079919279}
+{"candidate": "tev1-dec", "text": "kill nginx service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "nginx"}, "got": "none", "got_args": {}, "ms": 1039.0332909883}
+{"candidate": "tev1-dec", "text": "bounce ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "none", "got_args": {}, "ms": 756.4693749882281}
+{"candidate": "tev1-dec", "text": "open the pr for this branch", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 753.7075410073157}
+{"candidate": "tev1-dec", "text": "show me my pull request in the browser", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 994.52912498964}
+{"candidate": "tev1-dec", "text": "open this branch's PR", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 709.5427080057561}
+{"candidate": "tev1-dec", "text": "take me to the pull request", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 718.0609579954762}
+{"candidate": "tev1-dec", "text": "view the current pr on github", "expected": "open_pr", "expected_args": {}, "got": "none", "got_args": {}, "ms": 813.398625003174}
+{"candidate": "tev1-dec", "text": "open the PR", "expected": "open_pr", "expected_args": {}, "got": "none", "got_args": {}, "ms": 911.5650420135353}
+{"candidate": "tev1-dec", "text": "open README.md in my editor", "expected": "open_file", "expected_args": {"path": "README.md"}, "got": "open_file", "got_args": {}, "ms": 902.7579999819864}
+{"candidate": "tev1-dec", "text": "edit install.sh at line 42", "expected": "open_file", "expected_args": {"path": "install.sh", "line": 42}, "got": "none", "got_args": {}, "ms": 787.8216670069378}
+{"candidate": "tev1-dec", "text": "open src/main.py line 120", "expected": "open_file", "expected_args": {"path": "src/main.py", "line": 120}, "got": "none", "got_args": {}, "ms": 808.7629590008873}
+{"candidate": "tev1-dec", "text": "jump to line 7 of Makefile", "expected": "open_file", "expected_args": {"path": "Makefile", "line": 7}, "got": "none", "got_args": {}, "ms": 751.0353339894209}
+{"candidate": "tev1-dec", "text": "open up config.yaml", "expected": "open_file", "expected_args": {"path": "config.yaml"}, "got": "none", "got_args": {}, "ms": 750.1890829880722}
+{"candidate": "tev1-dec", "text": "edit the file zsh-autocompllama.zsh around line 300", "expected": "open_file", "expected_args": {"path": "zsh-autocompllama.zsh", "line": 300}, "got": "none", "got_args": {}, "ms": 687.0685419999063}
+{"candidate": "tev1-dec", "text": "open package.json", "expected": "open_file", "expected_args": {"path": "package.json"}, "got": "none", "got_args": {}, "ms": 706.94329199614}
+{"candidate": "tev1-dec", "text": "kill whatever is on port 8080", "expected": "kill_port", "expected_args": {"port": 8080}, "got": "kill_port", "got_args": {}, "ms": 693.0624579836149}
+{"candidate": "tev1-dec", "text": "kill the process on port 3000", "expected": "kill_port", "expected_args": {"port": 3000}, "got": "kill_port", "got_args": {}, "ms": 696.089083008701}
+{"candidate": "tev1-dec", "text": "something is hogging port 5432, kill it", "expected": "kill_port", "expected_args": {"port": 5432}, "got": "kill_port", "got_args": {}, "ms": 790.1187090028543}
+{"candidate": "tev1-dec", "text": "free up port 8000", "expected": "kill_port", "expected_args": {"port": 8000}, "got": "kill_port", "got_args": {}, "ms": 714.3919999944046}
+{"candidate": "tev1-dec", "text": "stop the thing listening on 4000", "expected": "kill_port", "expected_args": {"port": 4000}, "got": "kill_port", "got_args": {}, "ms": 751.2649160053115}
+{"candidate": "tev1-dec", "text": "terminate the server on port 5173", "expected": "kill_port", "expected_args": {"port": 5173}, "got": "kill_port", "got_args": {}, "ms": 712.949207983911}
+{"candidate": "tev1-dec", "text": "port 9000 kill", "expected": "kill_port", "expected_args": {"port": 9000}, "got": "kill_port", "got_args": {}, "ms": 691.0186249879189}
+{"candidate": "tev1-dec", "text": "what's running on port 3000", "expected": "show_port", "expected_args": {"port": 3000}, "got": "none", "got_args": {}, "ms": 767.8456249996088}
+{"candidate": "tev1-dec", "text": "who is using port 8080", "expected": "show_port", "expected_args": {"port": 8080}, "got": "none", "got_args": {}, "ms": 699.8214169871062}
+{"candidate": "tev1-dec", "text": "which process has port 5432", "expected": "show_port", "expected_args": {"port": 5432}, "got": "none", "got_args": {}, "ms": 716.6032909881324}
+{"candidate": "tev1-dec", "text": "is anything listening on 4000", "expected": "show_port", "expected_args": {"port": 4000}, "got": "none", "got_args": {}, "ms": 671.0555420140736}
+{"candidate": "tev1-dec", "text": "show me what's on port 11434", "expected": "show_port", "expected_args": {"port": 11434}, "got": "show_port", "got_args": {}, "ms": 678.3877499983646}
+{"candidate": "tev1-dec", "text": "check port 8000", "expected": "show_port", "expected_args": {"port": 8000}, "got": "none", "got_args": {}, "ms": 680.1410839834716}
+{"candidate": "tev1-dec", "text": "checkout the feature branch for the installer", "expected": "checkout_branch", "expected_args": {"query": "installer"}, "got": "checkout_branch", "got_args": {}, "ms": 693.8263330084737}
+{"candidate": "tev1-dec", "text": "switch to the branch with pages in the name", "expected": "checkout_branch", "expected_args": {"query": "pages"}, "got": "checkout_branch", "got_args": {}, "ms": 666.6934170061722}
+{"candidate": "tev1-dec", "text": "go to the cli branch", "expected": "checkout_branch", "expected_args": {"query": "cli"}, "got": "none", "got_args": {}, "ms": 698.2997499871999}
+{"candidate": "tev1-dec", "text": "check out the branch about path repair", "expected": "checkout_branch", "expected_args": {"query": "path-repair"}, "got": "checkout_branch", "got_args": {}, "ms": 658.2321659952868}
+{"candidate": "tev1-dec", "text": "switch git branch to main", "expected": "checkout_branch", "expected_args": {"query": "main"}, "got": "none", "got_args": {}, "ms": 859.908207989065}
+{"candidate": "tev1-dec", "text": "jump to the trailing space fix branch", "expected": "checkout_branch", "expected_args": {"query": "trailing-space"}, "got": "none", "got_args": {}, "ms": 674.415332992794}
+{"candidate": "tev1-dec", "text": "checkout the intent suggestions branch", "expected": "checkout_branch", "expected_args": {"query": "intent"}, "got": "checkout_branch", "got_args": {}, "ms": 647.7928750100546}
+{"candidate": "tev1-dec", "text": "run the tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 666.4812090166379}
+{"candidate": "tev1-dec", "text": "run this project's test suite", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 679.3281249993015}
+{"candidate": "tev1-dec", "text": "test it", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 673.8284580060281}
+{"candidate": "tev1-dec", "text": "kick off the tests please", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 655.9767499857116}
+{"candidate": "tev1-dec", "text": "execute the unit tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 666.2741669861134}
+{"candidate": "tev1-dec", "text": "run tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 680.0994590157643}
+{"candidate": "tev1-dec", "text": "what changed since yesterday", "expected": "git_changes_since", "expected_args": {"since": "yesterday"}, "got": "none", "got_args": {}, "ms": 677.2777909936849}
+{"candidate": "tev1-dec", "text": "show me the changes from the last week", "expected": "git_changes_since", "expected_args": {"since": "last week"}, "got": "git_changes_since", "got_args": {}, "ms": 725.9924999962095}
+{"candidate": "tev1-dec", "text": "what did we change in the last 3 days", "expected": "git_changes_since", "expected_args": {"since": "3 days ago"}, "got": "none", "got_args": {}, "ms": 773.373083997285}
+{"candidate": "tev1-dec", "text": "diff since this morning", "expected": "git_changes_since", "expected_args": {"since": "this morning"}, "got": "git_changes_since", "got_args": {}, "ms": 745.1314589998219}
+{"candidate": "tev1-dec", "text": "what's new in this repo since monday", "expected": "git_changes_since", "expected_args": {"since": "monday"}, "got": "none", "got_args": {}, "ms": 726.923167007044}
+{"candidate": "tev1-dec", "text": "changes since last month", "expected": "git_changes_since", "expected_args": {"since": "last month"}, "got": "git_changes_since", "got_args": {}, "ms": 730.9580419969279}
+{"candidate": "tev1-dec", "text": "tail the ollama log", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 753.0861670093145}
+{"candidate": "tev1-dec", "text": "follow the postgres logs", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "none", "got_args": {}, "ms": 1231.0810839990154}
+{"candidate": "tev1-dec", "text": "show me the redis log live", "expected": "tail_service_log", "expected_args": {"service": "redis"}, "got": "none", "got_args": {}, "ms": 1194.0522079821676}
+{"candidate": "tev1-dec", "text": "watch nginx logs", "expected": "tail_service_log", "expected_args": {"service": "nginx"}, "got": "open_pr", "got_args": {}, "ms": 1169.0305410011206}
+{"candidate": "tev1-dec", "text": "what is ollama logging", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 1585.0438750057947}
+{"candidate": "tev1-dec", "text": "stream the postgresql log", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "aws_profile", "got_args": {"name": "plasmidsaurus-dev"}, "ms": 785.324833006598}
+{"candidate": "tev1-dec", "text": "what's taking up space here", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {}, "ms": 817.4142090138048}
+{"candidate": "tev1-dec", "text": "disk usage of this directory", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {}, "ms": 1168.8436249969527}
+{"candidate": "tev1-dec", "text": "what is eating my disk in ~/Downloads", "expected": "disk_usage", "expected_args": {"path": "~/Downloads"}, "got": "disk_usage", "got_args": {}, "ms": 797.645457991166}
+{"candidate": "tev1-dec", "text": "show the biggest things in /var/log", "expected": "disk_usage", "expected_args": {"path": "/var/log"}, "got": "none", "got_args": {}, "ms": 858.4602920163888}
+{"candidate": "tev1-dec", "text": "how much space is this folder using", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {}, "ms": 818.5585419996642}
+{"candidate": "tev1-dec", "text": "where did my disk space go", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {}, "ms": 772.3534170072526}
+{"candidate": "tev1-dec", "text": "git status", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 852.3391659837216}
+{"candidate": "tev1-dec", "text": "ls -la", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 734.2014999885578}
+{"candidate": "tev1-dec", "text": "gti pus", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 699.0669170045294}
+{"candidate": "tev1-dec", "text": "docker ps -a", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 704.579167009797}
+{"candidate": "tev1-dec", "text": "convert this mp4 to a gif", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 689.0211249992717}
+{"candidate": "tev1-dec", "text": "what's the weather like", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 717.0727089978755}
+{"candidate": "tev1-dec", "text": "write a haiku about zsh", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 706.090709019918}
+{"candidate": "tev1-dec", "text": "undo my last commit but keep the changes", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 693.9842920110095}
+{"candidate": "tev1-dec", "text": "cd to my api server dir", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 709.9370410142001}
+{"candidate": "tev1-dec", "text": "compress the logs folder into a tarball", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 718.4654579905327}
+{"candidate": "tev1-dec", "text": "rename all the png files to jpg", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 746.0142080090009}
+{"candidate": "tev1-dec", "text": "ssh into the build box", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 691.5085839864332}
+{"candidate": "tev1-dec", "text": "how many lines are in this file", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 707.9512089840136}
+{"candidate": "tev1-dec", "text": "delete everything in node_modules", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 876.9512919825502}
+{"candidate": "tev1-dec", "text": "show the last 5 commits", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 834.1330410039518}
+{"candidate": "tev1-dec", "text": "pull from this git repo", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 842.1212499961257}
+{"candidate": "q3b-strict", "text": "switch to the prod eu cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "kube_context", "got_args": {"name": "prod-eu"}, "ms": 539.703415997792}
+{"candidate": "q3b-strict", "text": "use the staging kube context", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "kube_context", "got_args": {"name": "staging"}, "ms": 514.9049579922576}
+{"candidate": "q3b-strict", "text": "point kubectl at dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 538.4809999959543}
+{"candidate": "q3b-strict", "text": "change k8s context to prod us", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "kube_context", "got_args": {"name": "prod-us"}, "ms": 545.5161249847151}
+{"candidate": "q3b-strict", "text": "kubectl context staging please", "expected": "kube_context", "expected_args": {"name": "staging"}, "got": "kube_context", "got_args": {"name": "staging"}, "ms": 575.9103330201469}
+{"candidate": "q3b-strict", "text": "go to the us production cluster", "expected": "kube_context", "expected_args": {"name": "prod-us"}, "got": "kube_context", "got_args": {"name": "prod-us"}, "ms": 521.3244580081664}
+{"candidate": "q3b-strict", "text": "switch kube to dev", "expected": "kube_context", "expected_args": {"name": "dev"}, "got": "kube_context", "got_args": {"name": "dev"}, "ms": 497.42545798653737}
+{"candidate": "q3b-strict", "text": "I need to be on the eu prod cluster", "expected": "kube_context", "expected_args": {"name": "prod-eu"}, "got": "kube_context", "got_args": {"name": "prod-eu"}, "ms": 531.9701249827631}
+{"candidate": "q3b-strict", "text": "use the prod aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "prod-eu"}, "ms": 566.7132920061704}
+{"candidate": "q3b-strict", "text": "switch aws to the dev account", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 516.6842920007184}
+{"candidate": "q3b-strict", "text": "set aws profile to default", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 496.4468329853844}
+{"candidate": "q3b-strict", "text": "aws profile plasmidsaurus-dev", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 479.9073340254836}
+{"candidate": "q3b-strict", "text": "I want the production aws credentials", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-prod"}, "got": "aws_profile", "got_args": {"name": "prod-eu"}, "ms": 549.3158750177827}
+{"candidate": "q3b-strict", "text": "go back to the default aws profile", "expected": "aws_profile", "expected_args": {"name": "default"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 501.8454160017427}
+{"candidate": "q3b-strict", "text": "use my dev aws profile", "expected": "aws_profile", "expected_args": {"name": "plasmidsaurus-dev"}, "got": "aws_profile", "got_args": {"name": "dev"}, "ms": 486.5995839936659}
+{"candidate": "q3b-strict", "text": "start postgres", "expected": "brew_service", "expected_args": {"action": "start", "service": "postgresql@16"}, "got": "brew_service", "got_args": {"action": "start", "service": "postgresql@16"}, "ms": 703.2977500057314}
+{"candidate": "q3b-strict", "text": "restart ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "brew_service", "got_args": {"action": "restart", "service": "ollama"}, "ms": 615.3792080003768}
+{"candidate": "q3b-strict", "text": "stop redis", "expected": "brew_service", "expected_args": {"action": "stop", "service": "redis"}, "got": "brew_service", "got_args": {"action": "stop", "service": "redis"}, "ms": 625.7962500094436}
+{"candidate": "q3b-strict", "text": "bring nginx back up", "expected": "brew_service", "expected_args": {"action": "start", "service": "nginx"}, "got": "tail_service_log", "got_args": {"service": "nginx"}, "ms": 485.0129169935826}
+{"candidate": "q3b-strict", "text": "turn off the ollama service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "ollama"}, "got": "brew_service", "got_args": {"action": "stop", "service": "ollama"}, "ms": 662.3941250145435}
+{"candidate": "q3b-strict", "text": "restart the postgres service", "expected": "brew_service", "expected_args": {"action": "restart", "service": "postgresql@16"}, "got": "brew_service", "got_args": {"action": "restart", "service": "postgresql@16"}, "ms": 693.5852080059703}
+{"candidate": "q3b-strict", "text": "start the redis server", "expected": "brew_service", "expected_args": {"action": "start", "service": "redis"}, "got": "brew_service", "got_args": {"action": "start", "service": "redis"}, "ms": 784.3915419944096}
+{"candidate": "q3b-strict", "text": "kill nginx service", "expected": "brew_service", "expected_args": {"action": "stop", "service": "nginx"}, "got": "kill_port", "got_args": {"port": 80}, "ms": 521.8739169940818}
+{"candidate": "q3b-strict", "text": "bounce ollama", "expected": "brew_service", "expected_args": {"action": "restart", "service": "ollama"}, "got": "none", "got_args": {}, "ms": 384.1599579900503}
+{"candidate": "q3b-strict", "text": "open the pr for this branch", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 400.4029580100905}
+{"candidate": "q3b-strict", "text": "show me my pull request in the browser", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 368.04387500160374}
+{"candidate": "q3b-strict", "text": "open this branch's PR", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 371.0202499933075}
+{"candidate": "q3b-strict", "text": "take me to the pull request", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 371.26662500668317}
+{"candidate": "q3b-strict", "text": "view the current pr on github", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 380.74808300007135}
+{"candidate": "q3b-strict", "text": "open the PR", "expected": "open_pr", "expected_args": {}, "got": "open_pr", "got_args": {}, "ms": 433.01066700951196}
+{"candidate": "q3b-strict", "text": "open README.md in my editor", "expected": "open_file", "expected_args": {"path": "README.md"}, "got": "open_file", "got_args": {"path": "README.md"}, "ms": 649.4098749826662}
+{"candidate": "q3b-strict", "text": "edit install.sh at line 42", "expected": "open_file", "expected_args": {"path": "install.sh", "line": 42}, "got": "open_file", "got_args": {"path": "install.sh", "line": 42}, "ms": 762.0099999767262}
+{"candidate": "q3b-strict", "text": "open src/main.py line 120", "expected": "open_file", "expected_args": {"path": "src/main.py", "line": 120}, "got": "open_file", "got_args": {"path": "src/main.py", "line": 120}, "ms": 797.0254170068074}
+{"candidate": "q3b-strict", "text": "jump to line 7 of Makefile", "expected": "open_file", "expected_args": {"path": "Makefile", "line": 7}, "got": "open_file", "got_args": {"path": "Makefile", "line": 7}, "ms": 628.4061250044033}
+{"candidate": "q3b-strict", "text": "open up config.yaml", "expected": "open_file", "expected_args": {"path": "config.yaml"}, "got": "open_file", "got_args": {"path": "config.yaml"}, "ms": 544.0893750055693}
+{"candidate": "q3b-strict", "text": "edit the file zsh-autocompllama.zsh around line 300", "expected": "open_file", "expected_args": {"path": "zsh-autocompllama.zsh", "line": 300}, "got": "open_file", "got_args": {"path": "zsh-autocompllama.zsh", "line": 300}, "ms": 1041.6785829875153}
+{"candidate": "q3b-strict", "text": "open package.json", "expected": "open_file", "expected_args": {"path": "package.json"}, "got": "open_file", "got_args": {"path": "package.json"}, "ms": 616.2266670144163}
+{"candidate": "q3b-strict", "text": "kill whatever is on port 8080", "expected": "kill_port", "expected_args": {"port": 8080}, "got": "kill_port", "got_args": {"port": 8080}, "ms": 589.565041998867}
+{"candidate": "q3b-strict", "text": "kill the process on port 3000", "expected": "kill_port", "expected_args": {"port": 3000}, "got": "kill_port", "got_args": {"port": 3000}, "ms": 680.3078330121934}
+{"candidate": "q3b-strict", "text": "something is hogging port 5432, kill it", "expected": "kill_port", "expected_args": {"port": 5432}, "got": "kill_port", "got_args": {"port": 5432}, "ms": 706.6545840061735}
+{"candidate": "q3b-strict", "text": "free up port 8000", "expected": "kill_port", "expected_args": {"port": 8000}, "got": "kill_port", "got_args": {"port": 8000}, "ms": 656.8562090105843}
+{"candidate": "q3b-strict", "text": "stop the thing listening on 4000", "expected": "kill_port", "expected_args": {"port": 4000}, "got": "kill_port", "got_args": {"port": 4000}, "ms": 590.2811250125524}
+{"candidate": "q3b-strict", "text": "terminate the server on port 5173", "expected": "kill_port", "expected_args": {"port": 5173}, "got": "kill_port", "got_args": {"port": 5173}, "ms": 545.3482500161044}
+{"candidate": "q3b-strict", "text": "port 9000 kill", "expected": "kill_port", "expected_args": {"port": 9000}, "got": "kill_port", "got_args": {"port": 9000}, "ms": 583.414749999065}
+{"candidate": "q3b-strict", "text": "what's running on port 3000", "expected": "show_port", "expected_args": {"port": 3000}, "got": "show_port", "got_args": {"port": 3000}, "ms": 573.071249993518}
+{"candidate": "q3b-strict", "text": "who is using port 8080", "expected": "show_port", "expected_args": {"port": 8080}, "got": "show_port", "got_args": {"port": 8080}, "ms": 562.8320000250824}
+{"candidate": "q3b-strict", "text": "which process has port 5432", "expected": "show_port", "expected_args": {"port": 5432}, "got": "show_port", "got_args": {"port": 5432}, "ms": 560.4035409924109}
+{"candidate": "q3b-strict", "text": "is anything listening on 4000", "expected": "show_port", "expected_args": {"port": 4000}, "got": "show_port", "got_args": {"port": 4000}, "ms": 549.4981249794364}
+{"candidate": "q3b-strict", "text": "show me what's on port 11434", "expected": "show_port", "expected_args": {"port": 11434}, "got": "show_port", "got_args": {"port": 11434}, "ms": 575.6053749937564}
+{"candidate": "q3b-strict", "text": "check port 8000", "expected": "show_port", "expected_args": {"port": 8000}, "got": "show_port", "got_args": {"port": 8000}, "ms": 553.7623340205755}
+{"candidate": "q3b-strict", "text": "checkout the feature branch for the installer", "expected": "checkout_branch", "expected_args": {"query": "installer"}, "got": "checkout_branch", "got_args": {"query": "feature"}, "ms": 483.17883297568187}
+{"candidate": "q3b-strict", "text": "switch to the branch with pages in the name", "expected": "checkout_branch", "expected_args": {"query": "pages"}, "got": "checkout_branch", "got_args": {"query": "pages"}, "ms": 514.2135419882834}
+{"candidate": "q3b-strict", "text": "go to the cli branch", "expected": "checkout_branch", "expected_args": {"query": "cli"}, "got": "checkout_branch", "got_args": {"query": "cli"}, "ms": 468.13979200669564}
+{"candidate": "q3b-strict", "text": "check out the branch about path repair", "expected": "checkout_branch", "expected_args": {"query": "path-repair"}, "got": "checkout_branch", "got_args": {"query": "path repair"}, "ms": 502.08587502129376}
+{"candidate": "q3b-strict", "text": "switch git branch to main", "expected": "checkout_branch", "expected_args": {"query": "main"}, "got": "checkout_branch", "got_args": {"query": "main"}, "ms": 464.932749979198}
+{"candidate": "q3b-strict", "text": "jump to the trailing space fix branch", "expected": "checkout_branch", "expected_args": {"query": "trailing-space"}, "got": "checkout_branch", "got_args": {"query": "trailing space fix"}, "ms": 552.4270000169054}
+{"candidate": "q3b-strict", "text": "checkout the intent suggestions branch", "expected": "checkout_branch", "expected_args": {"query": "intent"}, "got": "checkout_branch", "got_args": {"query": "intent suggestions"}, "ms": 484.3432500201743}
+{"candidate": "q3b-strict", "text": "run the tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 394.3324580031913}
+{"candidate": "q3b-strict", "text": "run this project's test suite", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 368.11212499742396}
+{"candidate": "q3b-strict", "text": "test it", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 382.335417001741}
+{"candidate": "q3b-strict", "text": "kick off the tests please", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 362.81470899120905}
+{"candidate": "q3b-strict", "text": "execute the unit tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 361.66533298091963}
+{"candidate": "q3b-strict", "text": "run tests", "expected": "run_tests", "expected_args": {}, "got": "run_tests", "got_args": {}, "ms": 382.39979100762866}
+{"candidate": "q3b-strict", "text": "what changed since yesterday", "expected": "git_changes_since", "expected_args": {"since": "yesterday"}, "got": "git_changes_since", "got_args": {"since": "yesterday"}, "ms": 499.25395799800754}
+{"candidate": "q3b-strict", "text": "show me the changes from the last week", "expected": "git_changes_since", "expected_args": {"since": "last week"}, "got": "git_changes_since", "got_args": {"since": "last week"}, "ms": 494.31520799407735}
+{"candidate": "q3b-strict", "text": "what did we change in the last 3 days", "expected": "git_changes_since", "expected_args": {"since": "3 days ago"}, "got": "git_changes_since", "got_args": {"since": "3 days ago"}, "ms": 535.4955000220798}
+{"candidate": "q3b-strict", "text": "diff since this morning", "expected": "git_changes_since", "expected_args": {"since": "this morning"}, "got": "git_changes_since", "got_args": {"since": "this morning"}, "ms": 508.7106660066638}
+{"candidate": "q3b-strict", "text": "what's new in this repo since monday", "expected": "git_changes_since", "expected_args": {"since": "monday"}, "got": "git_changes_since", "got_args": {"since": "monday"}, "ms": 512.4923330149613}
+{"candidate": "q3b-strict", "text": "changes since last month", "expected": "git_changes_since", "expected_args": {"since": "last month"}, "got": "git_changes_since", "got_args": {"since": "last month"}, "ms": 502.69950000802055}
+{"candidate": "q3b-strict", "text": "tail the ollama log", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "tail_service_log", "got_args": {"service": "ollama"}, "ms": 528.5270839813165}
+{"candidate": "q3b-strict", "text": "follow the postgres logs", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "tail_service_log", "got_args": {"service": "postgresql@16"}, "ms": 555.9202079894021}
+{"candidate": "q3b-strict", "text": "show me the redis log live", "expected": "tail_service_log", "expected_args": {"service": "redis"}, "got": "tail_service_log", "got_args": {"service": "redis"}, "ms": 514.0697919996455}
+{"candidate": "q3b-strict", "text": "watch nginx logs", "expected": "tail_service_log", "expected_args": {"service": "nginx"}, "got": "tail_service_log", "got_args": {"service": "nginx"}, "ms": 516.2010829953942}
+{"candidate": "q3b-strict", "text": "what is ollama logging", "expected": "tail_service_log", "expected_args": {"service": "ollama"}, "got": "tail_service_log", "got_args": {"service": "ollama"}, "ms": 501.3019999896642}
+{"candidate": "q3b-strict", "text": "stream the postgresql log", "expected": "tail_service_log", "expected_args": {"service": "postgresql@16"}, "got": "tail_service_log", "got_args": {"service": "postgresql@16"}, "ms": 551.7830000026152}
+{"candidate": "q3b-strict", "text": "what's taking up space here", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "."}, "ms": 442.3557500122115}
+{"candidate": "q3b-strict", "text": "disk usage of this directory", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "."}, "ms": 444.0654590143822}
+{"candidate": "q3b-strict", "text": "what is eating my disk in ~/Downloads", "expected": "disk_usage", "expected_args": {"path": "~/Downloads"}, "got": "disk_usage", "got_args": {"path": "~/Downloads"}, "ms": 473.99883400066756}
+{"candidate": "q3b-strict", "text": "show the biggest things in /var/log", "expected": "disk_usage", "expected_args": {"path": "/var/log"}, "got": "disk_usage", "got_args": {"path": "/var/log"}, "ms": 514.1062499897089}
+{"candidate": "q3b-strict", "text": "how much space is this folder using", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "this folder"}, "ms": 489.9681670067366}
+{"candidate": "q3b-strict", "text": "where did my disk space go", "expected": "disk_usage", "expected_args": {}, "got": "disk_usage", "got_args": {"path": "."}, "ms": 439.61999999010004}
+{"candidate": "q3b-strict", "text": "git status", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 397.9467909957748}
+{"candidate": "q3b-strict", "text": "ls -la", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 406.98483400046825}
+{"candidate": "q3b-strict", "text": "gti pus", "expected": "none", "expected_args": {}, "got": "git_changes_since", "got_args": {"since": "HEAD"}, "ms": 609.1072499984875}
+{"candidate": "q3b-strict", "text": "docker ps -a", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 374.82770800124854}
+{"candidate": "q3b-strict", "text": "convert this mp4 to a gif", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 441.71608399483375}
+{"candidate": "q3b-strict", "text": "what's the weather like", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 350.0998329836875}
+{"candidate": "q3b-strict", "text": "write a haiku about zsh", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 365.00779099878855}
+{"candidate": "q3b-strict", "text": "undo my last commit but keep the changes", "expected": "none", "expected_args": {}, "got": "git_changes_since", "got_args": {"since": "HEAD~1"}, "ms": 541.6947079938836}
+{"candidate": "q3b-strict", "text": "cd to my api server dir", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 382.3616660083644}
+{"candidate": "q3b-strict", "text": "compress the logs folder into a tarball", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 346.41550001106225}
+{"candidate": "q3b-strict", "text": "rename all the png files to jpg", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 476.3577500125393}
+{"candidate": "q3b-strict", "text": "ssh into the build box", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 391.00158301880583}
+{"candidate": "q3b-strict", "text": "how many lines are in this file", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 357.9495419980958}
+{"candidate": "q3b-strict", "text": "delete everything in node_modules", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 386.84883300447837}
+{"candidate": "q3b-strict", "text": "show the last 5 commits", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 409.1316250269301}
+{"candidate": "q3b-strict", "text": "pull from this git repo", "expected": "none", "expected_args": {}, "got": "none", "got_args": {}, "ms": 373.548417002894}

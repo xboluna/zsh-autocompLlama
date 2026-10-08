@@ -1,0 +1,97 @@
+{"text": "switch to the prod eu cluster", "action": "kube_context", "args": {"name": "prod-eu"}}
+{"text": "use the staging kube context", "action": "kube_context", "args": {"name": "staging"}}
+{"text": "point kubectl at dev", "action": "kube_context", "args": {"name": "dev"}}
+{"text": "change k8s context to prod us", "action": "kube_context", "args": {"name": "prod-us"}}
+{"text": "kubectl context staging please", "action": "kube_context", "args": {"name": "staging"}}
+{"text": "go to the us production cluster", "action": "kube_context", "args": {"name": "prod-us"}}
+{"text": "switch kube to dev", "action": "kube_context", "args": {"name": "dev"}}
+{"text": "I need to be on the eu prod cluster", "action": "kube_context", "args": {"name": "prod-eu"}}
+{"text": "use the prod aws profile", "action": "aws_profile", "args": {"name": "plasmidsaurus-prod"}}
+{"text": "switch aws to the dev account", "action": "aws_profile", "args": {"name": "plasmidsaurus-dev"}}
+{"text": "set aws profile to default", "action": "aws_profile", "args": {"name": "default"}}
+{"text": "aws profile plasmidsaurus-dev", "action": "aws_profile", "args": {"name": "plasmidsaurus-dev"}}
+{"text": "I want the production aws credentials", "action": "aws_profile", "args": {"name": "plasmidsaurus-prod"}}
+{"text": "go back to the default aws profile", "action": "aws_profile", "args": {"name": "default"}}
+{"text": "use my dev aws profile", "action": "aws_profile", "args": {"name": "plasmidsaurus-dev"}}
+{"text": "start postgres", "action": "brew_service", "args": {"action": "start", "service": "postgresql@16"}}
+{"text": "restart ollama", "action": "brew_service", "args": {"action": "restart", "service": "ollama"}}
+{"text": "stop redis", "action": "brew_service", "args": {"action": "stop", "service": "redis"}}
+{"text": "bring nginx back up", "action": "brew_service", "args": {"action": "start", "service": "nginx"}}
+{"text": "turn off the ollama service", "action": "brew_service", "args": {"action": "stop", "service": "ollama"}}
+{"text": "restart the postgres service", "action": "brew_service", "args": {"action": "restart", "service": "postgresql@16"}}
+{"text": "start the redis server", "action": "brew_service", "args": {"action": "start", "service": "redis"}}
+{"text": "kill nginx service", "action": "brew_service", "args": {"action": "stop", "service": "nginx"}}
+{"text": "bounce ollama", "action": "brew_service", "args": {"action": "restart", "service": "ollama"}}
+{"text": "open the pr for this branch", "action": "open_pr", "args": {}}
+{"text": "show me my pull request in the browser", "action": "open_pr", "args": {}}
+{"text": "open this branch's PR", "action": "open_pr", "args": {}}
+{"text": "take me to the pull request", "action": "open_pr", "args": {}}
+{"text": "view the current pr on github", "action": "open_pr", "args": {}}
+{"text": "open the PR", "action": "open_pr", "args": {}}
+{"text": "open README.md in my editor", "action": "open_file", "args": {"path": "README.md"}}
+{"text": "edit install.sh at line 42", "action": "open_file", "args": {"path": "install.sh", "line": 42}}
+{"text": "open src/main.py line 120", "action": "open_file", "args": {"path": "src/main.py", "line": 120}}
+{"text": "jump to line 7 of Makefile", "action": "open_file", "args": {"path": "Makefile", "line": 7}}
+{"text": "open up config.yaml", "action": "open_file", "args": {"path": "config.yaml"}}
+{"text": "edit the file zsh-autocompllama.zsh around line 300", "action": "open_file", "args": {"path": "zsh-autocompllama.zsh", "line": 300}}
+{"text": "open package.json", "action": "open_file", "args": {"path": "package.json"}}
+{"text": "kill whatever is on port 8080", "action": "kill_port", "args": {"port": 8080}}
+{"text": "kill the process on port 3000", "action": "kill_port", "args": {"port": 3000}}
+{"text": "something is hogging port 5432, kill it", "action": "kill_port", "args": {"port": 5432}}
+{"text": "free up port 8000", "action": "kill_port", "args": {"port": 8000}}
+{"text": "stop the thing listening on 4000", "action": "kill_port", "args": {"port": 4000}}
+{"text": "terminate the server on port 5173", "action": "kill_port", "args": {"port": 5173}}
+{"text": "port 9000 kill", "action": "kill_port", "args": {"port": 9000}}
+{"text": "what's running on port 3000", "action": "show_port", "args": {"port": 3000}}
+{"text": "who is using port 8080", "action": "show_port", "args": {"port": 8080}}
+{"text": "which process has port 5432", "action": "show_port", "args": {"port": 5432}}
+{"text": "is anything listening on 4000", "action": "show_port", "args": {"port": 4000}}
+{"text": "show me what's on port 11434", "action": "show_port", "args": {"port": 11434}}
+{"text": "check port 8000", "action": "show_port", "args": {"port": 8000}}
+{"text": "checkout the feature branch for the installer", "action": "checkout_branch", "args": {"query": "installer"}}
+{"text": "switch to the branch with pages in the name", "action": "checkout_branch", "args": {"query": "pages"}}
+{"text": "go to the cli branch", "action": "checkout_branch", "args": {"query": "cli"}}
+{"text": "check out the branch about path repair", "action": "checkout_branch", "args": {"query": "path-repair"}}
+{"text": "switch git branch to main", "action": "checkout_branch", "args": {"query": "main"}}
+{"text": "jump to the trailing space fix branch", "action": "checkout_branch", "args": {"query": "trailing-space"}}
+{"text": "checkout the intent suggestions branch", "action": "checkout_branch", "args": {"query": "intent"}}
+{"text": "run the tests", "action": "run_tests", "args": {}}
+{"text": "run this project's test suite", "action": "run_tests", "args": {}}
+{"text": "test it", "action": "run_tests", "args": {}}
+{"text": "kick off the tests please", "action": "run_tests", "args": {}}
+{"text": "execute the unit tests", "action": "run_tests", "args": {}}
+{"text": "run tests", "action": "run_tests", "args": {}}
+{"text": "what changed since yesterday", "action": "git_changes_since", "args": {"since": "yesterday"}}
+{"text": "show me the changes from the last week", "action": "git_changes_since", "args": {"since": "last week"}}
+{"text": "what did we change in the last 3 days", "action": "git_changes_since", "args": {"since": "3 days ago"}}
+{"text": "diff since this morning", "action": "git_changes_since", "args": {"since": "this morning"}}
+{"text": "what's new in this repo since monday", "action": "git_changes_since", "args": {"since": "monday"}}
+{"text": "changes since last month", "action": "git_changes_since", "args": {"since": "last month"}}
+{"text": "tail the ollama log", "action": "tail_service_log", "args": {"service": "ollama"}}
+{"text": "follow the postgres logs", "action": "tail_service_log", "args": {"service": "postgresql@16"}}
+{"text": "show me the redis log live", "action": "tail_service_log", "args": {"service": "redis"}}
+{"text": "watch nginx logs", "action": "tail_service_log", "args": {"service": "nginx"}}
+{"text": "what is ollama logging", "action": "tail_service_log", "args": {"service": "ollama"}}
+{"text": "stream the postgresql log", "action": "tail_service_log", "args": {"service": "postgresql@16"}}
+{"text": "what's taking up space here", "action": "disk_usage", "args": {}}
+{"text": "disk usage of this directory", "action": "disk_usage", "args": {}}
+{"text": "what is eating my disk in ~/Downloads", "action": "disk_usage", "args": {"path": "~/Downloads"}}
+{"text": "show the biggest things in /var/log", "action": "disk_usage", "args": {"path": "/var/log"}}
+{"text": "how much space is this folder using", "action": "disk_usage", "args": {}}
+{"text": "where did my disk space go", "action": "disk_usage", "args": {}}
+{"text": "git status", "action": "none", "args": {}}
+{"text": "ls -la", "action": "none", "args": {}}
+{"text": "gti pus", "action": "none", "args": {}}
+{"text": "docker ps -a", "action": "none", "args": {}}
+{"text": "convert this mp4 to a gif", "action": "none", "args": {}}
+{"text": "what's the weather like", "action": "none", "args": {}}
+{"text": "write a haiku about zsh", "action": "none", "args": {}}
+{"text": "undo my last commit but keep the changes", "action": "none", "args": {}}
+{"text": "cd to my api server dir", "action": "none", "args": {}}
+{"text": "compress the logs folder into a tarball", "action": "none", "args": {}}
+{"text": "rename all the png files to jpg", "action": "none", "args": {}}
+{"text": "ssh into the build box", "action": "none", "args": {}}
+{"text": "how many lines are in this file", "action": "none", "args": {}}
+{"text": "delete everything in node_modules", "action": "none", "args": {}}
+{"text": "show the last 5 commits", "action": "none", "args": {}}
+{"text": "pull from this git repo", "action": "none", "args": {}}
