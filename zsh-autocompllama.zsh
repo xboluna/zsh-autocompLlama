@@ -10,8 +10,14 @@
 # without that keypress.
 
 # ---------------------------------------------------------------------------
-# Configuration. Set any of these in ~/.zshrc before the plugin loads.
+# Configuration. Choose settings with 'zsh-autocompllama configure', which
+# saves them to $ZSH_AUTOCOMPLLAMA_CONFIG (read here, below), or set any of
+# these in ~/.zshrc before the plugin loads; a zshrc value takes precedence.
 # ---------------------------------------------------------------------------
+
+(( ! ${+ZSH_AUTOCOMPLLAMA_CONFIG} )) && typeset -g ZSH_AUTOCOMPLLAMA_CONFIG=${XDG_CONFIG_HOME:-$HOME/.config}/zsh-autocompllama/config.zsh
+source "${${(%):-%x}:A:h}/cli.zsh"
+_zsh_autocompllama_config_load
 
 # ollama model. The 3B coder model answers in a few hundred ms on Apple
 # Silicon with ~2 GB resident and is the first size whose fill-ins are
@@ -599,8 +605,8 @@ _zsh_autocompllama_context() {
 # prefix and a request only pays for its own task text. (The fill-in
 # request has a different shape and cannot share it.)
 _zsh_autocompllama_system() {
-  print -r -- "Context about the user's machine, project and shell session. A recent command \
-marked '# FAILED' did not work; never suggest it again as it was."
+  print -r -- "Context about the user's machine, project and shell session. The command \
+'zsh-autocompllama' (subcommands: update, configure, check) manages this completion plugin."
   _zsh_autocompllama_context
 }
 

@@ -166,8 +166,6 @@ mentioned $PLUGIN || add+=( $PLUGIN )
 (( $#add )) && block+=( "plugins+=(${(j: :)add})" )
 mentioned ZSH_AUTOSUGGEST_STRATEGY ||
   block+=( "ZSH_AUTOSUGGEST_STRATEGY=(autocompllama)   # instant history suggestion while the model thinks" )
-[[ $model != qwen2.5-coder:3b ]] && ! mentioned ZSH_OLLAMA_MODEL &&
-  block+=( "ZSH_OLLAMA_MODEL=$model" )
 block+=( "$END_MARK" )
 
 local -a out
@@ -212,8 +210,23 @@ if (( $#block )); then
 fi
 
 # ---------------------------------------------------------------------------
-# Model: pull it if the server is up and does not have it.
+# Model: remember a non-default choice in the plugin's config file (what
+# 'zsh-autocompllama configure' edits), and pull it if the server is up and
+# does not have it.
 # ---------------------------------------------------------------------------
+if [[ $model != qwen2.5-coder:3b ]] && ! mentioned ZSH_OLLAMA_MODEL; then
+  config=${ZSH_AUTOCOMPLLAMA_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh-autocompllama/config.zsh}
+  if [[ -r $config ]] && grep -q "^ZSH_OLLAMA_MODEL=${(qq)model}\$" "$config"; then
+    ok "model $model already chosen in ${config/#$HOME/~}"
+  elif (( dry_run )); then
+    plan "would set ZSH_OLLAMA_MODEL=$model in ${config/#$HOME/~}"
+  else
+    mkdir -p "${config:h}" &&
+      { [[ -r $config ]] && grep -v '^ZSH_OLLAMA_MODEL=' "$config"; print -r -- "ZSH_OLLAMA_MODEL=${(qq)model}"; } > "$config.tmp.$$" &&
+      mv "$config.tmp.$$" "$config" || die "could not write $config."
+    ok "model $model chosen in ${config/#$HOME/~}"
+  fi
+fi
 if (( pull_model )); then
   tagged=$model; [[ $tagged == *:* ]] || tagged="$tagged:latest"
   if ! ollama list >/dev/null 2>&1; then

@@ -160,9 +160,27 @@ zsh-autosuggestions in `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE` (default `fg=8`);
 some terminal palettes make that colour nearly invisible, in which case
 `ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=244'` is a safe mid-grey.
 
-## Configuration
+## The `zsh-autocompllama` command
 
-Set any of these in `~/.zshrc` before the plugin loads.
+```
+zsh-autocompllama              status, and whether an update is available
+zsh-autocompllama update       pull the latest main into the plugin checkout
+zsh-autocompllama configure    choose settings interactively
+zsh-autocompllama check        verify the installation (tools, server, model)
+```
+
+`configure` shows each setting with its current value and where it comes
+from, toggles the on/off ones and prompts for the others, and saves them to
+`~/.config/zsh-autocompllama/config.zsh`, which the plugin reads when it
+loads. New shells pick them up. It is scriptable too: `configure list`,
+`configure set VAR VALUE`, `configure reset [VAR|--all]`. A setting you
+assign in `~/.zshrc` keeps that value; `configure` says so and leaves it to
+you.
+
+## All settings
+
+Everything `configure` offers, and the rest, as variables. Set any of these
+in `~/.zshrc` before the plugin loads, or through `configure`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |

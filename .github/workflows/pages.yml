@@ -3,7 +3,7 @@ name: pages
 on:
   push:
     branches: [main]
-    paths: [README.md, install.sh, zsh-autocompllama.zsh, .github/scripts/build-site.sh, .github/workflows/pages.yml]
+    paths: [README.md, install.sh, zsh-autocompllama.zsh, cli.zsh, .github/scripts/build-site.sh, .github/workflows/pages.yml]
   workflow_dispatch:
 permissions:
   contents: read
