@@ -107,8 +107,7 @@ _zsh_autocompllama_cli_status() {
   else
     local -i behind=$(git -C "$dir" rev-list --count HEAD..origin/main 2>/dev/null)
     if (( behind > 0 )); then
-      print -r -- "  $behind new commit$( (( behind == 1 )) || print -n s ) on main: run 'zsh-autocompllama update'"
-      git -C "$dir" log --format='    %s' HEAD..origin/main 2>/dev/null | head -5
+      print -r -- "  new update available: run 'zsh-autocompllama update'"
     else
       print -r -- "  up to date with main"
     fi
