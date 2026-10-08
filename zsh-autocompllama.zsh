@@ -84,14 +84,34 @@
 # listing and recent commands run in this directory tree. 0 disables either.
 (( ! ${+ZSH_AUTOCOMPLLAMA_MAX_FILES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_FILES=30
 (( ! ${+ZSH_AUTOCOMPLLAMA_MAX_HISTORY} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_HISTORY=10
+# Also sent, as short cards so the model has real names to use: which
+# well-known tools are installed, the aliases you actually use (up to
+# MAX_ALIASES, by how often they appear in history), the GitHub owner/repo
+# of the current remote, and what the project here can run (make targets,
+# npm scripts, just recipes, compose services; up to MAX_PROJECT_ENTRIES
+# each). The last two are computed when you change directory, not per
+# request. 0 disables a card.
+(( ! ${+ZSH_AUTOCOMPLLAMA_MAX_ALIASES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_ALIASES=10
+(( ! ${+ZSH_AUTOCOMPLLAMA_MAX_PROJECT_ENTRIES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_PROJECT_ENTRIES=8
+# A generated command whose path arguments do not exist is still shown (it
+# may well create them), with those arguments in this style so you can see
+# they are unverified. Empty shows them like the rest.
+(( ! ${+ZSH_AUTOCOMPLLAMA_STYLE_UNVERIFIED} )) && typeset -g ZSH_AUTOCOMPLLAMA_STYLE_UNVERIFIED='underline'
+# When a translated description comes back as something that cannot be
+# right (does not parse, unknown command or subcommand), tell the model
+# exactly what was wrong and let it try once more. 0 just drops it.
+(( ! ${+ZSH_AUTOCOMPLLAMA_REPAIR} )) && typeset -g ZSH_AUTOCOMPLLAMA_REPAIR=1
 
 # How long ollama keeps the model loaded after a request. -1 keeps it resident
 # so a suggestion never pays the multi-second model load; set e.g. '5m' to
 # release memory when idle.
 (( ! ${+ZSH_AUTOCOMPLLAMA_KEEP_ALIVE} )) && typeset -g ZSH_AUTOCOMPLLAMA_KEEP_ALIVE=-1
 # Context window and output cap. Commands are short; a small context keeps the
-# KV cache small and the output cap bounds latency on a rambling model.
-(( ! ${+ZSH_AUTOCOMPLLAMA_NUM_CTX} )) && typeset -g ZSH_AUTOCOMPLLAMA_NUM_CTX=2048
+# KV cache small and the output cap bounds latency on a rambling model. The
+# context block with its cards is usually under 1000 tokens; ollama silently
+# drops the start of a prompt that does not fit, so leave headroom. With
+# ZSH_AUTOCOMPLLAMA_LOG set, every request logs its prompt token count.
+(( ! ${+ZSH_AUTOCOMPLLAMA_NUM_CTX} )) && typeset -g ZSH_AUTOCOMPLLAMA_NUM_CTX=4096
 (( ! ${+ZSH_AUTOCOMPLLAMA_NUM_PREDICT} )) && typeset -g ZSH_AUTOCOMPLLAMA_NUM_PREDICT=64
 
 typeset -g _ZSH_AUTOCOMPLLAMA_OS=$(uname -s)
@@ -140,26 +160,52 @@ zsh_autocompllama_check() {
 # History
 # ---------------------------------------------------------------------------
 
-# Recent commands run in the current directory tree, most recent first, one
-# per line. Uses zsh-histdb when it is loaded (it knows the directory each
-# command ran in) and falls back to plain shell history otherwise.
+# Recent commands, most recent first, one per line: what this shell session
+# ran last, wherever that was, since what comes next depends on what just
+# happened (and whether it failed). Each line carries the exit status when
+# the command failed and the directory when it was not this one. With
+# zsh-histdb loaded, commands previously run in this directory tree top the
+# list up when the session is short; without it, plain shell history is
+# per session already.
 _zsh_autocompllama_recent_commands() {
+  setopt localoptions extendedglob
   local limit=$1
   (( limit > 0 )) || return 0
   if (( $+functions[_histdb_query] )); then
-    _histdb_query "
-      select
-        case when history.exit_status not in (0, 130) and history.exit_status is not null
-             then commands.argv || '  # exit ' || history.exit_status
-             else commands.argv end
-      from history
-      left join commands on history.command_id = commands.rowid
-      left join places on history.place_id = places.rowid
-      where places.dir like '$(sql_escape $PWD)%'
-        and commands.argv != ''
-      group by commands.argv
-      order by max(history.start_time) desc
-      limit $limit"
+    local -a out
+    local decorate="
+      case when history.exit_status not in (0, 130) and history.exit_status is not null
+           then commands.argv || '  # exit ' || history.exit_status
+           else commands.argv end
+      || case when places.dir != '$(sql_escape $PWD)'
+              then '  # in ' || replace(places.dir, '$(sql_escape $HOME)', '~')
+              else '' end"
+    if [[ -n $HISTDB_SESSION ]]; then
+      out=( ${(f)"$(_histdb_query "
+        select $decorate
+        from history
+        left join commands on history.command_id = commands.rowid
+        left join places on history.place_id = places.rowid
+        where history.session = $HISTDB_SESSION
+          and places.host = ${HISTDB_HOST}
+          and commands.argv != ''
+        order by history.start_time desc
+        limit $limit")"} )
+    fi
+    if (( $#out < limit )); then
+      out+=( ${(f)"$(_histdb_query "
+        select $decorate
+        from history
+        left join commands on history.command_id = commands.rowid
+        left join places on history.place_id = places.rowid
+        where places.dir like '$(sql_escape $PWD)%'
+          and commands.argv != ''
+        group by commands.argv
+        order by max(history.start_time) desc
+        limit $limit")"} )
+      out=( ${(u)out} )
+    fi
+    print -rl -- ${out[1,limit]}
   else
     local -a lines
     lines=( ${(f)"$(fc -ln -$limit 2>/dev/null || fc -ln 1 2>/dev/null)"} )
@@ -243,6 +289,7 @@ _zsh_autocompllama_distance() {
 
 # Distinct first words of history commands, one per line.
 _zsh_autocompllama_history_heads() {
+  setopt localoptions extendedglob
   local -a heads
   if (( $+functions[_histdb_query] )); then
     heads=( ${(f)"$(_histdb_query "
@@ -259,6 +306,7 @@ _zsh_autocompllama_history_heads() {
 # starting with <partial>, best first by the usual ranking, at most <limit>.
 # Usage: _zsh_autocompllama_commands_by_head <partial> <limit> <head>...
 _zsh_autocompllama_commands_by_head() {
+  setopt localoptions extendedglob
   local partial=$1 limit=$2; shift 2
   local -a heads out; heads=( "$@" )
   (( $#heads )) || return 0
@@ -314,13 +362,17 @@ _zsh_autocompllama_near_candidates() {
   [[ -n $head ]] || return 0
   (( $#typed <= 40 )) || return 0
 
-  # First words of history within one edit of the typed one (or equal to it).
+  # First words of history within one edit of the typed one (or equal to
+  # it). A first word that already names a command or alias is taken as
+  # meant: only typos get fuzzed, so 'gst ' is not rewritten into git.
   local -a heads
   local h
+  local -i fuzz=1
+  whence -w -- "$head" >/dev/null 2>&1 && fuzz=0
   for h in ${(f)"$(_zsh_autocompllama_history_heads)"}; do
     if [[ $h == $head ]]; then
       heads+=( "$h" )
-    elif (( $#head >= 3 && ($#h - $#head) >= -1 && ($#h - $#head) <= 1 )); then
+    elif (( fuzz && $#head >= 3 && ($#h - $#head) >= -1 && ($#h - $#head) <= 1 )); then
       _zsh_autocompllama_distance "$head" "$h"
       (( REPLY <= 1 )) && heads+=( "$h" )
     fi
@@ -332,9 +384,11 @@ _zsh_autocompllama_near_candidates() {
   local -a pool scored
   pool=( ${(f)"$(_zsh_autocompllama_commands_by_head "$partial" 50 "${heads[@]}")"} )
   local -i allowed=$(( 1 + $#rest / 5 )) i d k
-  local cmd tail
+  local cmd tail trimmed=${typed%%[[:space:]]#}
   for (( i = 1; i <= $#pool; i++ )); do
     cmd=$pool[i]
+    # The typed text minus its trailing space is not a rewrite of it.
+    [[ $cmd == $trimmed ]] && continue
     # The command after its first word.
     tail=${${${cmd##[[:space:]]#}##[^[:space:]]#}##[[:space:]]#}
     d=999
@@ -362,15 +416,166 @@ _zsh_autosuggest_strategy_autocompllama() {
 # Model
 # ---------------------------------------------------------------------------
 
+# Which of these well-known tools are installed. Computed once at load (a
+# hash lookup per name), so the model does not suggest apt on macOS or a
+# tool that is not here.
+typeset -g _ZSH_AUTOCOMPLLAMA_TOOLS
+() {
+  local -a known have
+  # Tools whose presence changes what to suggest; ubiquitous ones (curl,
+  # tar, ssh, vim) are left out to keep this short.
+  known=( gh docker docker-compose kubectl helm npm yarn pnpm bun deno uv poetry conda
+    mamba pytest ruff cargo go make cmake mvn gradle bundle composer brew apt dnf pacman
+    jq yq rg fd fzf bat eza tmux aws gcloud az terraform ansible ffmpeg pandoc Rscript julia
+    nextflow snakemake samtools bcftools bedtools minimap2 seqkit ollama sqlite3 psql )
+  local c
+  for c in "${known[@]}"; do (( $+commands[$c] )) && have+=( $c ); done
+  _ZSH_AUTOCOMPLLAMA_TOOLS=${(j:, :)have}
+}
+
+# The aliases you actually use, by how often their names start a command in
+# recent history (the last 2000 lines), with their expansions, so the model
+# can suggest them the way you type them. Costs a pass over those lines.
+_zsh_autocompllama_aliases_card() {
+  setopt localoptions extendedglob
+  (( ZSH_AUTOCOMPLLAMA_MAX_ALIASES > 0 && $#aliases )) || return 0
+  local -A count
+  local -a lines
+  lines=( ${(f)"$(fc -ln -2000 2>/dev/null)"} )
+  local l w
+  for l in "${lines[@]}"; do
+    w=${${l##[[:space:]]#}%%[[:space:]]*}
+    [[ -n $w && -n ${aliases[$w]} ]] || continue
+    # An alias that only decorates the same command (ls='ls -G') tells the
+    # model nothing it can use.
+    [[ ${aliases[$w]} == $w(|[[:space:]]*) ]] && continue
+    (( count[$w]++ ))
+  done
+  (( $#count )) || return 0
+  local -a ranked
+  for w in "${(k)count[@]}"; do ranked+=( "${(l:6::0:)count[$w]} $w" ); done
+  ranked=( ${(O)ranked} )
+  local out
+  for l in "${(@)ranked[1,ZSH_AUTOCOMPLLAMA_MAX_ALIASES]}"; do
+    w=${l#* }
+    out+="${out:+, }$w='${aliases[$w][1,40]}'"
+  done
+  print -r -- "Aliases you use: $out"
+}
+
+# GitHub-style owner/repo of the current directory's git remote, for gh and
+# clone commands. One git call; cached per directory.
+_zsh_autocompllama_repo_card() {
+  local url
+  url=$(command git remote get-url origin 2>/dev/null) || return 0
+  [[ -n $url ]] || return 0
+  url=${url%/}; url=${url%.git}
+  local repo=${url##*[:/]} rest=${url%[:/]*} owner
+  owner=${rest##*[:/]}
+  [[ -n $owner && -n $repo ]] || return 0
+  print -r -- "Git remote: $owner/$repo"
+}
+
+# What the project in this directory can run: make targets, npm scripts,
+# just recipes, docker compose services. Parsed in zsh (jq for
+# package.json), capped per kind, cached per directory and refreshed when
+# one of the files changes.
+typeset -ga _ZSH_AUTOCOMPLLAMA_PROJECT_FILES
+_ZSH_AUTOCOMPLLAMA_PROJECT_FILES=( Makefile makefile GNUmakefile package.json justfile Justfile
+  docker-compose.yml docker-compose.yaml compose.yml compose.yaml )
+_zsh_autocompllama_project_stamp() {
+  local f
+  local -a st
+  REPLY=
+  for f in "${_ZSH_AUTOCOMPLLAMA_PROJECT_FILES[@]}"; do
+    [[ -f $f ]] || continue
+    zstat -A st +mtime -- "$f" 2>/dev/null && REPLY+="$f:$st[1] "
+  done
+}
+_zsh_autocompllama_project_card() {
+  setopt localoptions extendedglob
+  local -i max=$ZSH_AUTOCOMPLLAMA_MAX_PROJECT_ENTRIES
+  (( max > 0 )) || return 0
+  local -a parts lines names
+  local f
+  for f in Makefile makefile GNUmakefile; do
+    [[ -f $f ]] || continue
+    lines=( ${(f)"$(<$f)"} )
+    names=( ${${(M)lines:#[A-Za-z0-9_][A-Za-z0-9_./-]#:[^=]#}%%:*} )
+    names=( ${(u)names:#.*} )
+    (( $#names )) && parts+=( "make targets: ${(j:, :)names[1,max]}" )
+    break
+  done
+  if [[ -f package.json ]]; then
+    names=( ${(f)"$(jq -r '.scripts // {} | keys_unsorted[]' package.json 2>/dev/null)"} )
+    (( $#names )) && parts+=( "npm scripts: ${(j:, :)names[1,max]}" )
+  fi
+  for f in justfile Justfile; do
+    [[ -f $f ]] || continue
+    lines=( ${(f)"$(<$f)"} )
+    names=( ${${(M)lines:#[A-Za-z_][A-Za-z0-9_-]#( [^:=]#|):*}%%[ :]*} )
+    names=( ${(u)names} )
+    (( $#names )) && parts+=( "just recipes: ${(j:, :)names[1,max]}" )
+    break
+  done
+  for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+    [[ -f $f ]] || continue
+    lines=( ${(f)"$(<$f)"} )
+    local -i in_services=0
+    names=()
+    local l
+    for l in "${lines[@]}"; do
+      if [[ $l == services:* ]]; then in_services=1; continue; fi
+      (( in_services )) || continue
+      [[ $l == [^[:space:]#]* ]] && break
+      [[ $l == '  '[A-Za-z0-9_-]##:* ]] && names+=( ${${l##[[:space:]]#}%%:*} )
+    done
+    (( $#names )) && parts+=( "compose services: ${(j:, :)names[1,max]}" )
+    break
+  done
+  (( $#parts )) && print -r -- "Project here: ${(j:; :)parts}"
+}
+
+# Cards cached for the current directory. Refreshed on every directory
+# change (two cheap steps there) and, in the background request, whenever
+# the directory or one of the project files changed since.
+typeset -g _ZSH_AUTOCOMPLLAMA_CARD_DIR _ZSH_AUTOCOMPLLAMA_CARD_STAMP \
+  _ZSH_AUTOCOMPLLAMA_CARD_REPO _ZSH_AUTOCOMPLLAMA_CARD_PROJECT
+_zsh_autocompllama_cards_refresh() {
+  _ZSH_AUTOCOMPLLAMA_CARD_DIR=$PWD
+  _zsh_autocompllama_project_stamp; _ZSH_AUTOCOMPLLAMA_CARD_STAMP=$REPLY
+  _ZSH_AUTOCOMPLLAMA_CARD_REPO=$(_zsh_autocompllama_repo_card)
+  _ZSH_AUTOCOMPLLAMA_CARD_PROJECT=$(_zsh_autocompllama_project_card)
+}
+# Print the cards, with <prefix> before each line. With 'names' as the
+# second argument, only the cards that supply names (aliases, project).
+_zsh_autocompllama_cards() {
+  local prefix=$1 only_names=$2
+  _zsh_autocompllama_project_stamp
+  if [[ $_ZSH_AUTOCOMPLLAMA_CARD_DIR != $PWD || $REPLY != $_ZSH_AUTOCOMPLLAMA_CARD_STAMP ]]; then
+    _zsh_autocompllama_cards_refresh
+  fi
+  [[ -z $only_names && -n $_ZSH_AUTOCOMPLLAMA_TOOLS ]] && print -r -- "${prefix}Tools installed: $_ZSH_AUTOCOMPLLAMA_TOOLS"
+  local aliases_card
+  aliases_card=$(_zsh_autocompllama_aliases_card)
+  [[ -n $aliases_card ]] && print -r -- "${prefix}${aliases_card}"
+  [[ -z $only_names && -n $_ZSH_AUTOCOMPLLAMA_CARD_REPO ]] && print -r -- "${prefix}${_ZSH_AUTOCOMPLLAMA_CARD_REPO}"
+  [[ -n $_ZSH_AUTOCOMPLLAMA_CARD_PROJECT ]] && print -r -- "${prefix}${_ZSH_AUTOCOMPLLAMA_CARD_PROJECT}"
+  return 0
+}
+
 # Context block sent ahead of the partial command. It describes the machine,
-# the directory and what the user has done here recently, so a small model has
-# real names to use instead of inventing them. Keep it stable between calls
-# (it is the cacheable prompt prefix) and put volatile parts last.
+# the tools and aliases in use, the project and directory, and what the
+# session has done recently, so a small model has real names to use instead
+# of inventing them. Keep it stable between calls (it is the cacheable
+# prompt prefix) and put volatile parts last.
 _zsh_autocompllama_context() {
-  local branch recent
+  setopt localoptions extendedglob
+  local branch
   branch=$(command git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
   print -r -- "OS: $_ZSH_AUTOCOMPLLAMA_OS"
+  _zsh_autocompllama_cards ""
   print -r -- "Directory: $PWD${branch:+ (git branch: $branch)}"
 
   if (( ZSH_AUTOCOMPLLAMA_MAX_FILES > 0 )); then
@@ -379,11 +584,23 @@ _zsh_autocompllama_context() {
     (( $#entries )) && print -r -- "Files: ${(j:, :)entries}"
   fi
 
-  recent=$(_zsh_autocompllama_recent_commands $ZSH_AUTOCOMPLLAMA_MAX_HISTORY)
-  if [[ -n $recent ]]; then
-    print -r -- "Recent commands here (most recent first):"
-    print -r -- "$recent"
+  local -a lines
+  lines=( ${(f)"$(_zsh_autocompllama_recent_commands $ZSH_AUTOCOMPLLAMA_MAX_HISTORY)"} )
+  if (( $#lines )); then
+    print -r -- "Recent commands (most recent first):"
+    # A long one-liner costs tokens out of proportion to what it tells.
+    print -rl -- ${lines[@]/(#m)?(#c121,)/${MATCH[1,120]}…}
   fi
+}
+
+# The system message of every chat request: the context block behind a
+# one-line framing. Identical across the pick, near-miss and translation
+# requests on purpose, so that ollama's prompt cache serves the whole
+# prefix and a request only pays for its own task text. (The fill-in
+# request has a different shape and cannot share it.)
+_zsh_autocompllama_system() {
+  print -r -- "Context about the user's machine, project and shell session:"
+  _zsh_autocompllama_context
 }
 
 # The same context as a shell-session transcript: comment header, then the
@@ -394,6 +611,9 @@ _zsh_autocompllama_transcript() {
   branch=$(command git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
   print -r -- "# Shell session on $_ZSH_AUTOCOMPLLAMA_OS"
+  # Names only here: this prompt cannot share the chat prefix cache, so it
+  # stays as short as it can.
+  _zsh_autocompllama_cards "# " names
   print -r -- "# Directory: $PWD${branch:+ (git branch: $branch)}"
 
   if (( ZSH_AUTOCOMPLLAMA_MAX_FILES > 0 )); then
@@ -406,7 +626,7 @@ _zsh_autocompllama_transcript() {
   lines=( ${(f)"$(_zsh_autocompllama_recent_commands $ZSH_AUTOCOMPLLAMA_MAX_HISTORY)"} )
   local l
   for l in "${(Oa)lines[@]}"; do
-    print -r -- "\$ $l"
+    print -r -- "\$ ${l[1,120]}${l[121,-1]:+…}"
   done
 }
 
@@ -455,26 +675,42 @@ _zsh_autocompllama_post() {
     return 1
   fi
 
+  # Prompt size is the thing to watch when adding context: log it.
+  if [[ -n $ZSH_AUTOCOMPLLAMA_LOG ]]; then
+    local stats
+    stats=$(printf '%s' "$response" | jq -r \
+      '"prompt=\(.prompt_eval_count // "?") output=\(.eval_count // "?") ms=\((.total_duration // 0) / 1000000 | floor)"' 2>/dev/null)
+    print -r -- "$(date '+%F %T') tokens $endpoint $stats" >> "$ZSH_AUTOCOMPLLAMA_LOG"
+  fi
+
   printf '%s' "$response"
 }
 
 # Send one chat request to ollama and print the assistant's reply, which is
-# constrained to match the given JSON schema.
+# constrained to match the given JSON schema. With a previous reply and a
+# correction, the conversation continues: the model sees its own answer and
+# what was wrong with it.
 # Usage: _zsh_autocompllama_chat <system prompt> <user prompt> <format JSON>
+#          [<previous reply> <correction>]
 _zsh_autocompllama_chat() {
   setopt localoptions pipefail
-  local system_prompt=$1 user_prompt=$2 format=$3
+  local system_prompt=$1 user_prompt=$2 format=$3 previous=$4 correction=$5
 
   local request_body
   request_body=$(_zsh_autocompllama_request_base | jq \
     --arg system "$system_prompt" \
     --arg prompt "$user_prompt" \
+    --arg previous "$previous" \
+    --arg correction "$correction" \
     --argjson format "$format" \
     '. + {
-      messages: [
+      messages: ([
         {role: "system", content: $system},
         {role: "user", content: $prompt}
-      ],
+      ] + (if $correction != "" then [
+        {role: "assistant", content: $previous},
+        {role: "user", content: $correction}
+      ] else [] end)),
       format: $format
     }')
 
@@ -529,20 +765,20 @@ _zsh_autocompllama_pick() {
     split("\n")[:-1]
     | {type: "object", properties: {cmd: {type: "string", enum: .}}, required: ["cmd"]}')
 
-  local system_prompt="You are a shell command completion engine. \
-The user message describes the machine, the working directory, its files and the commands \
-the user recently ran there, then lists candidate commands from the user's history, then \
-gives a partial terminal command after 'Partial command:'. Choose the candidate that best \
-completes what the user is typing. Answer NONE if no candidate fits."
+  # The context goes first, as the system message, identical for every chat
+  # request, so that ollama's prompt cache serves it and only the task text
+  # below is new each time.
+  local user_prompt="Task: you are a shell command completion engine. Below are candidate \
+commands from the user's history, then a partial terminal command after 'Partial command:'. \
+Choose the candidate that best completes what the user is typing. Answer NONE if no \
+candidate fits."
   if (( near )); then
-    system_prompt+=" The partial command does not match any of the user's commands exactly \
+    user_prompt+=" The partial command does not match any of the user's commands exactly \
 and is probably mistyped. The candidates are commands from the user's history that nearly \
 match it; choose the one the user most likely meant, even though it differs from what was typed. \
 Answer NONE unless a candidate is clearly what was meant."
   fi
-
-  local user_prompt
-  user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Candidates:"$'\n'
+  user_prompt+=$'\n\n'"Candidates:"$'\n'
   local i
   for (( i = 1; i <= $#candidates; i++ )); do
     user_prompt+="$i. ${candidates[i]}"$'\n'
@@ -550,7 +786,7 @@ Answer NONE unless a candidate is clearly what was meant."
   user_prompt+=$'\n'"Partial command: $partial"
 
   local reply choice
-  reply=$(_zsh_autocompllama_chat "$system_prompt" "$user_prompt" "$schema") || return 1
+  reply=$(_zsh_autocompllama_chat "$(_zsh_autocompllama_system)" "$user_prompt" "$schema") || return 1
   choice=$(printf '%s' "$reply" | jq -r '.cmd // empty' 2>/dev/null)
   [[ $choice == NONE ]] && return 0
   # Belt and braces: only ever return something that really was a candidate.
@@ -560,22 +796,28 @@ Answer NONE unless a candidate is clearly what was meant."
 # Ask the model for the command that does what the typed text describes.
 # Prints it, or nothing. The reply is constrained to a single string, with
 # the same machine, directory and history context as a pick, so that names
-# come from here rather than from the model's imagination.
-# Usage: _zsh_autocompllama_intent <typed text>
+# come from here rather than from the model's imagination. With a previous
+# answer and what was wrong with it, asks for a corrected one instead.
+# Usage: _zsh_autocompllama_intent <typed text> [<previous answer> <problem>]
 _zsh_autocompllama_intent() {
-  local typed=$1
+  setopt localoptions extendedglob
+  local typed=$1 previous=$2 problem=$3
   local schema='{"type": "object", "properties": {"cmd": {"type": "string"}}, "required": ["cmd"]}'
-  local system_prompt="You are a shell command engine. \
-The user message describes the machine, the working directory, its files and the commands \
-the user recently ran there, then gives text the user typed at the prompt after 'Typed:'. \
-That text is not a command but a description of what the user wants to do. Answer with the \
-single shell command line that does it, nothing else: no explanation, no prompt, no quoting \
-of the whole line. Prefer the tools, paths and names that appear in the context. Answer an \
-empty string if the request is unclear or cannot be done with one command."
+  local user_prompt="Task: you are a shell command engine. The text after 'Typed:' is what \
+the user typed at the prompt. It is not a command but a description of what the user wants \
+to do. Answer with the single shell command line that does it, nothing else: no explanation, \
+no prompt, no quoting of the whole line. Prefer the tools, paths and names that appear in \
+the context. Answer an empty string if the request is unclear or cannot be done with one \
+command."
+  user_prompt+=$'\n\n'"Typed: $typed"
 
-  local user_prompt reply cmd
-  user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Typed: $typed"
-  reply=$(_zsh_autocompllama_chat "$system_prompt" "$user_prompt" "$schema") || return 1
+  local reply cmd previous_reply correction
+  if [[ -n $problem ]]; then
+    previous_reply=$(jq -cn --arg cmd "$previous" '{cmd: $cmd}')
+    correction="That command cannot be right: $problem Answer again with a corrected command, \
+or an empty string if there is none."
+  fi
+  reply=$(_zsh_autocompllama_chat "$(_zsh_autocompllama_system)" "$user_prompt" "$schema" "$previous_reply" "$correction") || return 1
   cmd=$(printf '%s' "$reply" | jq -r '.cmd // empty' 2>/dev/null)
   cmd=${cmd##[[:space:]]#}; cmd=${cmd%%[[:space:]]#}
   cmd=${cmd#\$ }
@@ -635,16 +877,22 @@ _zsh_autocompllama_known_word() {
   (( ${#${(M)lines:#(*[[:space:]]|)${(b)w}([[:space:]]*|)}} ))
 }
 
-# Could this generated command plausibly run here? Two cheap checks that catch
-# most of what a small model makes up:
+# Could this generated command plausibly run here? Two cheap checks that
+# catch most of what a small model makes up, with two kinds of verdict:
 # 1. The first word (after VAR=value assignments and wrappers like sudo) must
 #    resolve to a command, builtin, function, alias or executable path.
 #    Compound commands (starting with a brace, paren or '!') are accepted.
-# 2. Every argument that looks like a file path must exist. Flags, URLs,
-#    globs, variables and words without a slash or leading ./~ are not checked.
-_zsh_autocompllama_valid_command() {
+#    Failing this is a hard failure: return 1, reason in REPLY.
+# 2. Arguments that look like file paths should exist. Flags, URLs, globs,
+#    variables and words without a slash or leading ./~ are not checked. A
+#    path that does not exist is a soft failure, since the command may be
+#    about to create it: return 2 with those words in reply, and the caller
+#    shows them as unverified.
+# Returns 0 when both hold.
+_zsh_autocompllama_check_command() {
   local -a words; words=( ${(z)1} )
   local w found_command=0
+  reply=(); REPLY=
   for w in "${words[@]}"; do
     if (( ! found_command )); then
       case $w in
@@ -652,18 +900,84 @@ _zsh_autocompllama_valid_command() {
         sudo|env|time|nohup|command|exec|builtin|nice|noglob) continue ;;
         '{'|'('|'!'|'{'*|'('*|'!'*) return 0 ;;
       esac
-      whence -w -- "$w" >/dev/null 2>&1 || return 1
+      if ! whence -w -- "$w" >/dev/null 2>&1; then
+        REPLY="'$w' is not a command, function or alias on this machine."
+        return 1
+      fi
       found_command=1
       continue
     fi
     case $w in
-      -*|*://*|*[\*\?\[\]\$\{]*) continue ;;
+      -*|*://*|*[\*\?\[\]\$\{\(\)\|\<\>\&\;]*|[\"\']*) continue ;;
       /*|./*|../*|'~'/*|*/*)
-        w=${w#[\"\']}; w=${w%[\"\']}
-        [[ -e ${~w} ]] || return 1 ;;
+        [[ -e ${~w} ]] || reply+=( "$w" ) ;;
     esac
   done
-  (( found_command ))
+  if (( ! found_command )); then
+    REPLY="There is no command in it."
+    return 1
+  fi
+  (( $#reply )) && return 2
+  return 0
+}
+
+# Check the subcommand of <command line> for a few tools where that is
+# cheap: git has a 20 ms command list (its --help opens a man page, over a
+# second), and docker, kubectl, cargo, go and helm exit non-zero at once
+# for an unknown subcommand under --help. gh, npm, brew, pip, uv and poetry
+# take 200-600 ms to print help, so they are deliberately not checked.
+# Returns 1 with a message in REPLY naming the real subcommands, 0
+# otherwise (including for tools not on the list).
+_zsh_autocompllama_check_subcommand() {
+  setopt localoptions extendedglob
+  REPLY=
+  local -a words; words=( ${(z)1} )
+  local c=$words[1] sub=$words[2]
+  [[ -n $sub && $sub != -* ]] || return 0
+  local -a names
+  case $c in
+    git)
+      names=( ${(f)"$(command git --list-cmds=main,others,alias,nohelpers 2>/dev/null)"} )
+      (( $#names )) || return 0
+      (( ${names[(Ie)$sub]} )) && return 0
+      names=( ${(f)"$(command git --list-cmds=main 2>/dev/null)"} )
+      REPLY="'$sub' is not a git subcommand. The git subcommands are: ${(j:, :)names[1,40]}."
+      return 1 ;;
+    docker|kubectl|cargo|go|helm)
+      command $c $sub --help >/dev/null 2>&1 && return 0
+      names=( ${${(M)${(f)"$(command $c --help 2>&1)"}:#[[:space:]]##[a-z][a-z0-9-]#[: ]*}##[[:space:]]#} )
+      names=( ${(u)${names%%[: ]*}} )
+      REPLY="'$sub' is not a $c subcommand.${names:+ The $c subcommands here are: ${(j:, :)names[1,40]}.}"
+      return 1 ;;
+  esac
+  return 0
+}
+
+# Every check a translated command must pass. 0: fine. 1: hard failure,
+# with what was wrong in REPLY (phrased for the model). 2: fine except for
+# the unverifiable path arguments in reply.
+_zsh_autocompllama_check_translation() {
+  local cmd=$1
+  if ! _zsh_autocompllama_parses "$cmd"; then
+    REPLY="It is not a valid zsh command line."
+    return 1
+  fi
+  local -i rc
+  _zsh_autocompllama_check_command "$cmd"; rc=$?
+  (( rc == 1 )) && return 1
+  local -a soft; soft=( "${reply[@]}" )
+  _zsh_autocompllama_check_subcommand "$cmd" || return 1
+  reply=( "${soft[@]}" )
+  return $rc
+}
+
+# Print a suggestion for the request child: any unverifiable words first,
+# one per UNVERIFIED line, then the command itself on the last line.
+_zsh_autocompllama_emit() {
+  local cmd=$1; shift
+  local w
+  for w in "$@"; do print -r -- "UNVERIFIED $w"; done
+  print -r -- "$cmd"
 }
 
 # Compute a suggestion for a partial command and print it. Today the result
@@ -677,13 +991,16 @@ _zsh_autocompllama_complete() {
   setopt localoptions extendedglob
   local partial=$1
   local completion
+  # Whatever path answers, suggesting the typed text with its trailing
+  # whitespace removed is suggesting nothing.
+  local trimmed=${partial%%[[:space:]]#}
 
   # First choice: pick from commands the user has actually run.
   local -a candidates
   candidates=( ${(f)"$(_zsh_autocompllama_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES)"} )
   if (( $#candidates )); then
     completion=$(_zsh_autocompllama_pick "$partial" "${candidates[@]}") || return 1
-    if [[ -n $completion ]]; then
+    if [[ -n $completion && $completion != $trimmed ]]; then
       print -r -- "$completion"
       return 0
     fi
@@ -691,11 +1008,15 @@ _zsh_autocompllama_complete() {
 
   # Second choice: the typed text may be mistyped; offer commands that nearly
   # match it. A pick here does not continue the typed text, so the line
-  # editor shows it as a rewrite.
-  candidates=( ${(f)"$(_zsh_autocompllama_near_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_NEAR)"} )
+  # editor shows it as a rewrite. A sentence is not a typo, and scoring one
+  # against history costs real time, so prose skips this.
+  local -i prose=0
+  _zsh_autocompllama_looks_like_prose "$partial" && prose=1
+  candidates=()
+  (( prose )) || candidates=( ${(f)"$(_zsh_autocompllama_near_candidates "$partial" $ZSH_AUTOCOMPLLAMA_MAX_NEAR)"} )
   if (( $#candidates )); then
     completion=$(_zsh_autocompllama_pick -n "$partial" "${candidates[@]}") || return 1
-    if [[ -n $completion ]]; then
+    if [[ -n $completion && $completion != $trimmed ]]; then
       print -r -- "$completion"
       return 0
     fi
@@ -707,24 +1028,36 @@ _zsh_autocompllama_complete() {
   # translation instead, and check it the same way as a generated command,
   # plus that it parses.
   local -a words; words=( ${(z)partial} )
-  if { (( $#words >= ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS )) &&
-       ! _zsh_autocompllama_first_word_known "$partial" } ||
-     _zsh_autocompllama_looks_like_prose "$partial"; then
+  if (( prose )) ||
+     { (( $#words >= ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS )) &&
+       ! _zsh_autocompllama_first_word_known "$partial" }; then
     if (( ! ZSH_AUTOCOMPLLAMA_INTENT )); then
       print -u2 -r -- "zsh-autocompllama: not a command and intent translation is off"
       return 2
     fi
     completion=$(_zsh_autocompllama_intent "$partial") || return 1
-    if [[ -z $completion || $completion == $partial ]]; then
+    if [[ -z $completion || $completion == $trimmed ]]; then
       print -u2 -r -- "zsh-autocompllama: no command for that from ${ZSH_OLLAMA_MODEL}"
       return 2
     fi
-    if ! _zsh_autocompllama_parses "$completion" ||
-       ! _zsh_autocompllama_valid_command "$completion"; then
-      print -u2 -r -- "zsh-autocompllama: rejected translation (does not parse, unknown command or path): $completion"
+    local -i rc
+    _zsh_autocompllama_check_translation "$completion"; rc=$?
+    if (( rc == 1 && ZSH_AUTOCOMPLLAMA_REPAIR )); then
+      # One more round, telling the model exactly what was wrong.
+      local first=$completion problem=$REPLY
+      completion=$(_zsh_autocompllama_intent "$partial" "$first" "$problem") || return 1
+      if [[ -z $completion || $completion == $trimmed ]]; then
+        print -u2 -r -- "zsh-autocompllama: rejected translation ($problem): $first; no correction"
+        return 2
+      fi
+      _zsh_autocompllama_check_translation "$completion"; rc=$?
+      (( rc == 1 )) && REPLY="$problem then $REPLY"
+    fi
+    if (( rc == 1 )); then
+      print -u2 -r -- "zsh-autocompllama: rejected translation ($REPLY): $completion"
       return 2
     fi
-    print -r -- "$completion"
+    _zsh_autocompllama_emit "$completion" "${reply[@]}"
     return 0
   fi
 
@@ -746,15 +1079,19 @@ _zsh_autocompllama_complete() {
     return 2
   fi
   completion="${partial}${continuation}"
-  if ! _zsh_autocompllama_valid_command "$completion"; then
-    print -u2 -r -- "zsh-autocompllama: rejected suggestion (unknown command or path): $completion"
+  local -i rc
+  _zsh_autocompllama_check_command "$completion"; rc=$?
+  if (( rc == 1 )); then
+    print -u2 -r -- "zsh-autocompllama: rejected suggestion ($REPLY): $completion"
     return 2
   fi
+  local -a unverified; unverified=( "${reply[@]}" )
   # When the model extends the word being typed (rather than adding words
   # after it), the result must be a word that is known to make sense: used in
   # a command before, a command name, an existing file, a flag, or something
   # unverifiable like a URL, glob or variable. This stops a typo from being
-  # "completed" into a longer typo.
+  # "completed" into a longer typo. A path-like word that does not exist is
+  # merely unverified (it may be about to be created).
   if [[ $partial != *[[:space:]] && $continuation != [[:space:]]* ]]; then
     local word="${partial##*[[:space:]]}${continuation%%[[:space:]]*}"
     case $word in
@@ -762,12 +1099,16 @@ _zsh_autocompllama_complete() {
       *)
         if ! { [[ -e ${~word} ]] || whence -w -- "$word" >/dev/null 2>&1 ||
                _zsh_autocompllama_known_word "$word" }; then
-          print -u2 -r -- "zsh-autocompllama: rejected suggestion (unknown word '$word'): $completion"
-          return 2
+          if [[ $word == (/*|./*|../*|'~'/*|*/*) ]]; then
+            (( ${unverified[(Ie)$word]} )) || unverified+=( "$word" )
+          else
+            print -u2 -r -- "zsh-autocompllama: rejected suggestion (unknown word '$word'): $completion"
+            return 2
+          fi
         fi ;;
     esac
   fi
-  print -r -- "$completion"
+  _zsh_autocompllama_emit "$completion" "${unverified[@]}"
 }
 
 # ---------------------------------------------------------------------------
@@ -871,6 +1212,10 @@ _zsh_autocompllama_prompt_width() {
 # Diff spans of the rewrite against the typed text: "a|b <start> <end> <style>"
 # with 0-based character offsets into the typed text (a) or the rewrite (b).
 typeset -ga _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS
+# The suggestion on screen (suffix or rewrite), the words in it that could
+# not be verified, and their "<start> <end>" offsets within it.
+typeset -g _ZSH_AUTOCOMPLLAMA_SUGGESTION
+typeset -ga _ZSH_AUTOCOMPLLAMA_UNVERIFIED _ZSH_AUTOCOMPLLAMA_MARKS
 
 # Character-level diff of <a> against <b>, as spans in
 # _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS: characters of a that b drops
@@ -941,12 +1286,47 @@ _zsh_autocompllama_diff_spans() {
   _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS=( "${spans[@]}" )
 }
 
-# Colour the rewrite line and the diff. Called after every widget while it
-# is showing, so our entries always come last and win over
-# zsh-autosuggestions' grey span (re-added after each widget) and the
-# syntax highlighting of the typed line.
-_zsh_autocompllama_replacement_highlight() {
+# Offsets of the unverified words within the suggestion, for highlighting.
+_zsh_autocompllama_marks_compute() {
+  _ZSH_AUTOCOMPLLAMA_MARKS=()
+  local w
+  local -i at
+  for w in "${_ZSH_AUTOCOMPLLAMA_UNVERIFIED[@]}"; do
+    at=${#${_ZSH_AUTOCOMPLLAMA_SUGGESTION%%"$w"*}}
+    (( at < $#_ZSH_AUTOCOMPLLAMA_SUGGESTION )) || continue
+    _ZSH_AUTOCOMPLLAMA_MARKS+=( "$at $(( at + $#w ))" )
+  done
+}
+
+# Colour what the plugin is showing: the rewrite line with its diff, and
+# the unverified words of either a rewrite or grey suffix text. Called
+# after every widget while a suggestion is up, so our entries always come
+# last and win over zsh-autosuggestions' grey span (re-added after each
+# widget) and the syntax highlighting of the typed line.
+_zsh_autocompllama_highlight() {
   region_highlight=( ${region_highlight:#*memo=zsh-autocompllama} )
+  local -i base=-1
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT &&
+        $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
+    _zsh_autocompllama_replacement_highlight
+    base=$(( $#BUFFER + 1 + _ZSH_AUTOCOMPLLAMA_REPLACEMENT_INDENT ))
+  elif [[ -n $_ZSH_AUTOCOMPLLAMA_SUGGESTION && -n $POSTDISPLAY &&
+          "$BUFFER$POSTDISPLAY" == "$_ZSH_AUTOCOMPLLAMA_SUGGESTION" ]]; then
+    base=0
+  else
+    return 0
+  fi
+  [[ -n $ZSH_AUTOCOMPLLAMA_STYLE_UNVERIFIED ]] || return 0
+  local m
+  local -a f
+  for m in "${_ZSH_AUTOCOMPLLAMA_MARKS[@]}"; do
+    f=( ${=m} )
+    region_highlight+=( "$(( base + f[1] )) $(( base + f[2] )) $ZSH_AUTOCOMPLLAMA_STYLE_UNVERIFIED memo=zsh-autocompllama" )
+  done
+}
+
+# Colour the rewrite line and the diff (entries only; see above).
+_zsh_autocompllama_replacement_highlight() {
   [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT &&
      $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]] || return 0
   local -i start=$#BUFFER
@@ -972,6 +1352,7 @@ _zsh_autocompllama_replacement_highlight() {
 
 # Show <command> as a rewrite of the current buffer.
 _zsh_autocompllama_replacement_show() {
+  setopt localoptions extendedglob
   _ZSH_AUTOCOMPLLAMA_REPLACEMENT=$1
   # Indent so the command sits under the typed one, prefix in the margin.
   local prefix=$ZSH_AUTOCOMPLLAMA_REPLACEMENT_PREFIX
@@ -984,10 +1365,19 @@ _zsh_autocompllama_replacement_show() {
   # Drop zsh-autosuggestions' grey text (and its highlight of it) first.
   (( $+functions[_zsh_autosuggest_highlight_reset] )) && _zsh_autosuggest_highlight_reset
   POSTDISPLAY=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT
-  _zsh_autocompllama_replacement_highlight
+  _zsh_autocompllama_highlight
   # This runs from an fd handler, where display changes do not appear on
   # their own (see zle -F in zshzle(1)).
   zle -R
+}
+
+# Forget what is being shown: the rewrite line if it is up, and any marks.
+_zsh_autocompllama_suggestion_clear() {
+  _zsh_autocompllama_replacement_clear
+  [[ -n $_ZSH_AUTOCOMPLLAMA_SUGGESTION ]] || return 0
+  _ZSH_AUTOCOMPLLAMA_SUGGESTION=
+  _ZSH_AUTOCOMPLLAMA_MARKS=()
+  region_highlight=( ${region_highlight:#*memo=zsh-autocompllama} )
 }
 
 # Take the rewrite line down, if it is up.
@@ -1037,19 +1427,32 @@ _zsh_autocompllama_request() {
 
   _zsh_autocompllama_cancel
   _ZSH_AUTOCOMPLLAMA_PENDING=$partial
+  _ZSH_AUTOCOMPLLAMA_UNVERIFIED=()
   exec {_ZSH_AUTOCOMPLLAMA_FD}< <(
     print -r -- $sysparams[pid]
     (( ZSH_AUTOCOMPLLAMA_DEBOUNCE > 0 )) && sleep $ZSH_AUTOCOMPLLAMA_DEBOUNCE
     print -r -- START
-    local out line
+    local out line logline
     out=$(_zsh_autocompllama_complete "$partial" 2>&1)
     case $? in
-      0) line="OK $out" ;;
-      2) line="NONE $out" ;;
-      *) line="ERR $out" ;;
+      0)
+        # Any UNVERIFIED lines come before the suggestion, which is last.
+        local -a lines unverified; lines=( ${(f)out} )
+        local extra
+        for extra in "${(@)lines[1,-2]}"; do
+          [[ $extra == UNVERIFIED\ * ]] || continue
+          print -r -- "$extra"
+          unverified+=( "${extra#UNVERIFIED }" )
+        done
+        line="OK ${lines[-1]}"
+        logline=$line
+        (( $#unverified )) && logline+="  [unverified: ${(j: :)unverified}]"
+        ;;
+      2) line="NONE $out"; logline=$line ;;
+      *) line="ERR $out"; logline=$line ;;
     esac
     [[ -n $ZSH_AUTOCOMPLLAMA_LOG ]] &&
-      print -r -- "$(date '+%F %T') [$partial] $line" >> "$ZSH_AUTOCOMPLLAMA_LOG"
+      print -r -- "$(date '+%F %T') [$partial] $logline" >> "$ZSH_AUTOCOMPLLAMA_LOG"
     print -r -- "$line"
   )
   # $! is not set by a process substitution, so the child reports its pid.
@@ -1069,6 +1472,10 @@ _zsh_autocompllama_on_result() {
     _zsh_autocompllama_spinner_show
     return 0
   fi
+  if [[ $line == UNVERIFIED\ * ]]; then
+    _ZSH_AUTOCOMPLLAMA_UNVERIFIED+=( "${line#UNVERIFIED }" )
+    return 0
+  fi
 
   local pending=$_ZSH_AUTOCOMPLLAMA_PENDING
   _zsh_autocompllama_cancel
@@ -1078,8 +1485,13 @@ _zsh_autocompllama_on_result() {
   case $line in
     OK\ *)
       local suggestion=${line#OK }
+      _zsh_autocompllama_suggestion_clear
+      _ZSH_AUTOCOMPLLAMA_SUGGESTION=$suggestion
+      _zsh_autocompllama_marks_compute
       if [[ $suggestion == "$pending"* ]]; then
         zle autosuggest-suggest -- "$suggestion"
+        _zsh_autocompllama_highlight
+        zle -R
       else
         _zsh_autocompllama_replacement_show "$suggestion"
       fi ;;
@@ -1101,10 +1513,10 @@ _zsh_autocompllama_on_change() {
       if [[ -z $POSTDISPLAY ]]; then
         POSTDISPLAY=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT
       elif [[ $POSTDISPLAY != "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
-        _zsh_autocompllama_replacement_clear
+        _zsh_autocompllama_suggestion_clear
       fi
     fi
-    _zsh_autocompllama_replacement_highlight
+    _zsh_autocompllama_highlight
     return 0
   fi
   # zsh-autosuggestions' accept widgets (right arrow, End) append whatever
@@ -1117,7 +1529,7 @@ _zsh_autocompllama_on_change() {
   fi
   _ZSH_AUTOCOMPLLAMA_LAST_BUFFER=$BUFFER
 
-  _zsh_autocompllama_replacement_clear
+  _zsh_autocompllama_suggestion_clear
   _zsh_autocompllama_cancel
   (( EPOCHSECONDS >= _ZSH_AUTOCOMPLLAMA_BACKOFF_UNTIL )) || return 0
   (( $#BUFFER >= ZSH_AUTOCOMPLLAMA_MIN_CHARS && CURSOR == $#BUFFER )) || return 0
@@ -1133,11 +1545,13 @@ _zsh_autocompllama_on_line_init() {
 }
 
 _zsh_autocompllama_on_line_finish() {
-  _zsh_autocompllama_replacement_clear
+  _zsh_autocompllama_suggestion_clear
   _zsh_autocompllama_cancel noredraw
 }
 
-zmodload zsh/datetime zsh/system
+zmodload zsh/datetime zsh/system zsh/stat zsh/parameter
+autoload -Uz add-zsh-hook
+add-zsh-hook chpwd _zsh_autocompllama_cards_refresh
 # The fd handler is installed with 'zle -F -w', which requires a widget.
 zle -N _zsh_autocompllama_on_result
 zle -N _zsh_autocompllama_on_tick
