@@ -20,8 +20,8 @@ the same → key:
 Characters the rewrite changes are yellow and characters it adds are green;
 characters of your typed text that it drops are red in the typed line.
 Any other key dismisses it, and Enter runs what you typed, not the rewrite.
-Nothing you typed is ever changed without one of those keypresses. The model
-is never allowed to just make something up:
+Nothing you typed is ever changed without one of those keypresses. Unless
+you typed a sentence, the model is never allowed to just make something up:
 
 1. Commands from your history that match what you typed are offered to the
    model as **candidates** and it has to pick one of them (or none). The reply
@@ -32,7 +32,15 @@ is never allowed to just make something up:
    `gti sta` finds `git status`): the first word may be one edit away from
    one you have used, and the rest is compared by edit distance. A pick from
    these is shown as a rewrite, since it does not continue what you typed.
-3. Only when neither fits does it finish what you typed.
+3. If what you typed is not a command at all but says what you want
+   ("command to pull from this git repo", "undo my last commit but keep the
+   changes"), it translates that into a command, shown as a rewrite. This is
+   the one path where the model writes a command you may never have run, so
+   it only applies to text whose first word is no command, alias or
+   function (and no near miss of one), or that reads as English, and the
+   answer still has to parse and name a real command and existing paths.
+   You can turn it off.
+4. Only when none of that applies does it finish what you typed.
    This is a fill-in-the-middle completion, not a chat: the model sees a
    transcript of your OS, working directory, file listing and recent commands
    ending with your partial command, followed by the next prompt line, and
@@ -128,6 +136,8 @@ Set any of these in `~/.zshrc` before the plugin loads.
 | `ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES` | `10` | History candidates offered to the model. `0` skips straight to generation. |
 | `ZSH_AUTOCOMPLLAMA_MAX_NEAR` | `5` | Near-miss history candidates offered when no history command continues the typed text. `0` disables rewrites from history. |
 | `ZSH_AUTOCOMPLLAMA_GENERATE` | `1` | Allow writing a command from scratch when no candidate fits. `0` only ever suggests commands you have run before. |
+| `ZSH_AUTOCOMPLLAMA_INTENT` | `1` | Translate a description of what you want into a command, shown as a rewrite. `0` disables. |
+| `ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS` | `2` | Fewer words than this are never treated as a description. |
 | `ZSH_AUTOCOMPLLAMA_MAX_FILES` | `30` | Directory entries included as context. `0` disables. |
 | `ZSH_AUTOCOMPLLAMA_MAX_HISTORY` | `10` | Recent commands from this directory tree included as context. `0` disables. |
 | `ZSH_AUTOCOMPLLAMA_KEEP_ALIVE` | `-1` | How long ollama keeps the model loaded. `-1` is forever, so a completion never waits for the model to load; `5m` frees memory when idle. |
@@ -172,7 +182,16 @@ the buffer is still what it was asked about. That function:
    same-length start of each command (one edit allowed per five characters),
    and asks the model to choose among those, telling it the typed text is
    probably mistyped.
-4. Otherwise, or on `NONE`, asks `/api/generate` with the transcript from
+4. Otherwise, if the text does not start with a command, alias or function
+   (and has at least `ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS` words) or reads
+   as English (three or more words, two of them function words such as
+   "the", "my", "to"), asks `/api/chat` with the context block and the
+   typed text for the command that does what it describes
+   (`_zsh_autocompllama_intent`), constrained to a single string, and
+   accepts it only if it parses (`zsh -n`) and passes
+   `_zsh_autocompllama_valid_command`. The rewrite line shows it plain,
+   without diff colours, since it shares little with the typed text.
+5. Otherwise, or on `NONE`, asks `/api/generate` with the transcript from
    `_zsh_autocompllama_transcript` plus the partial command as `prompt` and
    the next prompt line as `suffix` (`_zsh_autocompllama_continue`), so the
    model fills in the rest of the command, and validates the result with

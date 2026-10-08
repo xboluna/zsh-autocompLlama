@@ -71,6 +71,15 @@
 # When no history candidate fits, let the model write a command from scratch.
 # Set to 0 to only ever suggest commands you have run before.
 (( ! ${+ZSH_AUTOCOMPLLAMA_GENERATE} )) && typeset -g ZSH_AUTOCOMPLLAMA_GENERATE=1
+# When what you typed is not a command at all but a description of one
+# ("command to pull from this git repo"), let the model translate it into a
+# command, shown as a rewrite. Only text of at least INTENT_MIN_WORDS words
+# whose first word is not a command, alias or function and not a near miss
+# of one you have used is treated this way. This is the one path where the
+# model writes a command you may never have run; the result still has to
+# parse and name a real command and existing paths. Set to 0 to disable.
+(( ! ${+ZSH_AUTOCOMPLLAMA_INTENT} )) && typeset -g ZSH_AUTOCOMPLLAMA_INTENT=1
+(( ! ${+ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS} )) && typeset -g ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS=2
 # How much context to send with each request: entries of the current directory
 # listing and recent commands run in this directory tree. 0 disables either.
 (( ! ${+ZSH_AUTOCOMPLLAMA_MAX_FILES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_FILES=30
@@ -548,6 +557,73 @@ Answer NONE unless a candidate is clearly what was meant."
   (( ${candidates[(Ie)$choice]} )) && print -r -- "$choice"
 }
 
+# Ask the model for the command that does what the typed text describes.
+# Prints it, or nothing. The reply is constrained to a single string, with
+# the same machine, directory and history context as a pick, so that names
+# come from here rather than from the model's imagination.
+# Usage: _zsh_autocompllama_intent <typed text>
+_zsh_autocompllama_intent() {
+  local typed=$1
+  local schema='{"type": "object", "properties": {"cmd": {"type": "string"}}, "required": ["cmd"]}'
+  local system_prompt="You are a shell command engine. \
+The user message describes the machine, the working directory, its files and the commands \
+the user recently ran there, then gives text the user typed at the prompt after 'Typed:'. \
+That text is not a command but a description of what the user wants to do. Answer with the \
+single shell command line that does it, nothing else: no explanation, no prompt, no quoting \
+of the whole line. Prefer the tools, paths and names that appear in the context. Answer an \
+empty string if the request is unclear or cannot be done with one command."
+
+  local user_prompt reply cmd
+  user_prompt="$(_zsh_autocompllama_context)"$'\n\n'"Typed: $typed"
+  reply=$(_zsh_autocompllama_chat "$system_prompt" "$user_prompt" "$schema") || return 1
+  cmd=$(printf '%s' "$reply" | jq -r '.cmd // empty' 2>/dev/null)
+  cmd=${cmd##[[:space:]]#}; cmd=${cmd%%[[:space:]]#}
+  cmd=${cmd#\$ }
+  # Reject nothing, several lines, or an unfinished line (trailing backslash).
+  [[ -n $cmd && $cmd != *$'\n'* && $cmd != *\\ ]] || return 0
+  print -r -- "$cmd"
+}
+
+# Does the first word of <text> (after VAR=value assignments and wrappers
+# like sudo) name a command, builtin, function or alias?
+_zsh_autocompllama_first_word_known() {
+  local -a words; words=( ${(z)1} )
+  local w
+  for w in "${words[@]}"; do
+    case $w in
+      *=*) continue ;;
+      sudo|env|time|nohup|command|exec|builtin|nice|noglob) continue ;;
+      '{'|'('|'!'|'{'*|'('*|'!'*) return 0 ;;
+    esac
+    whence -w -- "$w" >/dev/null 2>&1
+    return
+  done
+  return 1
+}
+
+# Does <text> read as English rather than as a command? Three or more
+# words, at least two of which are function words that have no meaning in
+# shell syntax ("find the pr i opened" is a valid command line, but not one
+# anybody means). Shell keywords such as for, in, if, do are left out.
+_zsh_autocompllama_looks_like_prose() {
+  local -a words; words=( ${(z)1} )
+  (( $#words >= 3 )) || return 1
+  local -a function_words
+  function_words=( the a an my me i this that these those please how what which
+    where who whom whose to of from with into onto all any some every )
+  local w
+  local -i n=0
+  for w in "${words[@]}"; do
+    (( ${function_words[(Ie)${(L)w}]} )) && (( ++n ))
+  done
+  (( n >= 2 ))
+}
+
+# Does <text> parse as shell syntax?
+_zsh_autocompllama_parses() {
+  zsh -n -c "$1" 2>/dev/null
+}
+
 # Has <word> ever appeared as a word of a command in history?
 _zsh_autocompllama_known_word() {
   local w=$1
@@ -623,6 +699,33 @@ _zsh_autocompllama_complete() {
       print -r -- "$completion"
       return 0
     fi
+  fi
+
+  # Third choice: the typed text is not a command but says what to do:
+  # its first word is not a command (so finishing it is pointless, the
+  # first word can never resolve) or it reads as English. Ask for a
+  # translation instead, and check it the same way as a generated command,
+  # plus that it parses.
+  local -a words; words=( ${(z)partial} )
+  if { (( $#words >= ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS )) &&
+       ! _zsh_autocompllama_first_word_known "$partial" } ||
+     _zsh_autocompllama_looks_like_prose "$partial"; then
+    if (( ! ZSH_AUTOCOMPLLAMA_INTENT )); then
+      print -u2 -r -- "zsh-autocompllama: not a command and intent translation is off"
+      return 2
+    fi
+    completion=$(_zsh_autocompllama_intent "$partial") || return 1
+    if [[ -z $completion || $completion == $partial ]]; then
+      print -u2 -r -- "zsh-autocompllama: no command for that from ${ZSH_OLLAMA_MODEL}"
+      return 2
+    fi
+    if ! _zsh_autocompllama_parses "$completion" ||
+       ! _zsh_autocompllama_valid_command "$completion"; then
+      print -u2 -r -- "zsh-autocompllama: rejected translation (does not parse, unknown command or path): $completion"
+      return 2
+    fi
+    print -r -- "$completion"
+    return 0
   fi
 
   # Fallback: let the model write the command, then sanity-check it.
@@ -798,6 +901,9 @@ _zsh_autocompllama_diff_spans() {
       fi
     done
   done
+  # A rewrite that shares little with the typed text (a translated
+  # description, say) is not usefully a diff of it: leave it plain.
+  (( 2 * d[la*w+lb+1] <= (la > lb ? la : lb) )) || return 0
   # Walk back from the end, marking each character of a as kept or
   # dropped and each character of b as kept, changed or added.
   local -a ka kb
