@@ -639,6 +639,9 @@ _zsh_autocompllama_transcript() {
   lines=( ${(f)"$(_zsh_autocompllama_recent_commands $ZSH_AUTOCOMPLLAMA_MAX_HISTORY)"} )
   local l
   for l in "${(Oa)lines[@]}"; do
+    # The 'ran elsewhere' note is for the chat context; a small model
+    # continuing a transcript copies it into its answer.
+    l=${l%%  \# in *}
     print -r -- "\$ ${l[1,120]}${l[121,-1]:+…}"
   done
 }
@@ -1079,6 +1082,14 @@ _zsh_autocompllama_emit() {
   print -r -- "$cmd"
 }
 
+# Tell the line editor that the model is now being consulted, so it shows
+# the spinner. Only meaningful inside the request child, which opens fd 3
+# to the parent for it; elsewhere this is a no-op.
+_zsh_autocompllama_thinking() {
+  (( _ZSH_AUTOCOMPLLAMA_IN_CHILD )) && print -u3 -r -- START
+  return 0
+}
+
 # What to suggest on an empty line, from history alone. Takes the recent
 # commands most recent first, as _zsh_autocompllama_recent_commands prints
 # them (with their '# FAILED with exit N' and '# in dir' notes). Prints the
@@ -1140,10 +1151,15 @@ _zsh_autocompllama_fresh() {
     return 0
   fi
   (( ZSH_AUTOCOMPLLAMA_FRESH >= 2 )) || { print -u2 -r -- "zsh-autocompllama: no pattern in history for a fresh line"; return 2; }
+  _zsh_autocompllama_thinking
   local prefix continuation
   prefix="$(_zsh_autocompllama_transcript)"$'\n'"\$ "
   continuation=$(_zsh_autocompllama_continue "$prefix" $'\n$ ') || return 1
   continuation=${${continuation##[[:space:]]#}%%[[:space:]]#}
+  # The model sometimes answers with a prompt marker or copies a trailing
+  # note from the transcript; neither is part of a command.
+  continuation=${continuation#\$ }
+  continuation=${${continuation%%  \#*}%%[[:space:]]#}
   # A repeat of something just run is not a suggestion (retrying a failed
   # command is the history rule's job, and it checks the exit status).
   local -a just_ran; just_ran=( ${recent[@]%%  \#*} )
@@ -1176,6 +1192,7 @@ _zsh_autocompllama_complete() {
     _zsh_autocompllama_fresh
     return
   fi
+  _zsh_autocompllama_thinking
   # Whatever path answers, suggesting the typed text with its trailing
   # whitespace removed is suggesting nothing.
   local trimmed=${partial%%[[:space:]]#}
@@ -1670,7 +1687,11 @@ _zsh_autocompllama_request() {
   exec {_ZSH_AUTOCOMPLLAMA_FD}< <(
     print -r -- $sysparams[pid]
     (( ZSH_AUTOCOMPLLAMA_DEBOUNCE > 0 )) && sleep $ZSH_AUTOCOMPLLAMA_DEBOUNCE
-    [[ -n $partial ]] && print -r -- START
+    # fd 3 reaches the parent directly, so the completion can announce
+    # START (the spinner) at the point where it starts talking to the
+    # model, while its own stdout is captured below.
+    exec 3>&1
+    typeset -g _ZSH_AUTOCOMPLLAMA_IN_CHILD=1
     local out line logline
     out=$(_zsh_autocompllama_complete "$partial" 2>&1)
     case $? in
