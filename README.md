@@ -174,7 +174,9 @@ zsh-autocompllama check        verify the installation (tools, server, model)
 ```
 
 `configure` shows each setting with its current value and where it comes
-from, toggles the on/off ones and prompts for the others, and saves them to
+from, toggles the on/off ones, offers the four qwen2.5-coder sizes for the
+model (0.5b is snappy, 7b is the most careful; any other name can be typed),
+prompts for the rest, and saves them to
 `~/.config/zsh-autocompllama/config.zsh`, which the plugin reads when it
 loads. New shells pick them up. It is scriptable too: `configure list`,
 `configure set VAR VALUE`, `configure reset [VAR|--all]`. A setting you

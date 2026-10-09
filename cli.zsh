@@ -15,10 +15,12 @@
 typeset -g _ZSH_AUTOCOMPLLAMA_DIR=${${(%):-%x}:A:h}
 
 # The settings the command offers: variable, kind, default, one-line label.
-# Kinds: bool (1/0), int, text, onoff (on = the default string, off = empty).
+# Kinds: bool (1/0), int, text, onoff (on = the default string, off = empty),
+# choice:<function> (the function prints "value|note" lines; any other value
+# can still be typed).
 typeset -ga _ZSH_AUTOCOMPLLAMA_SETTINGS
 _ZSH_AUTOCOMPLLAMA_SETTINGS=(
-  "ZSH_OLLAMA_MODEL|text|qwen2.5-coder:3b|Model (ollama pull it first)"
+  "ZSH_OLLAMA_MODEL|choice:_zsh_autocompllama_model_choices|qwen2.5-coder:3b|Model"
   "ZSH_OLLAMA_URL|text|http://localhost:11434|ollama server"
   "ZSH_AUTOCOMPLLAMA_MAX_NEAR|int|5|Rewrites of mistyped commands from history (0 = off)"
   "ZSH_AUTOCOMPLLAMA_INTENT|bool|1|Translate a typed description into a command"
@@ -39,6 +41,21 @@ _zsh_autocompllama_fresh_choices() {
   print -r -- "0|never"
   print -r -- "1|from history only: retry the command that failed before a login, pull or install; what usually follows the last command"
   print -r -- "2|history, then ask the model (one model call after every command)"
+}
+
+# The models worth choosing between, with what each costs, marked when
+# already pulled. One 'ollama list' call.
+_zsh_autocompllama_model_choices() {
+  local -a pulled
+  pulled=( ${(f)"$(ollama list 2>/dev/null | awk 'NR > 1 { print $1 }')"} )
+  local m note
+  for m note in \
+    qwen2.5-coder:0.5b "fastest, about 400 MB, weaker judgement" \
+    qwen2.5-coder:1.5b "quick, about 1 GB" \
+    qwen2.5-coder:3b   "the default, about 2 GB, a few hundred ms per suggestion" \
+    qwen2.5-coder:7b   "best judgement, about 4.7 GB, roughly double the latency"; do
+    print -r -- "$m|$note$( (( ${pulled[(Ie)$m]} )) && print -n ' (pulled)' || print -n ' (not pulled yet)' )"
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -210,6 +227,22 @@ _zsh_autocompllama_cli_configure() {
       continue
     fi
     case $kind in
+      choice:*)
+        local -a choices; choices=( ${(f)"$(${kind#choice:})"} )
+        local -i j
+        print -r -- "  $label [${(P)var}]:"
+        for (( j = 1; j <= $#choices; j++ )); do
+          printf '   %2d  %-22s %s\n' $j "${choices[j]%%|*}" "${choices[j]#*|}"
+        done
+        read -r "answer?  Number, a model name, or '-' for the default (Enter keeps ${(P)var}): " || break
+        [[ -z $answer ]] && continue
+        if [[ $answer == - ]]; then unset "saved[$var]"; typeset -g $var=$default
+        elif [[ $answer == <1-> ]] && (( answer <= $#choices )); then
+          saved[$var]=${choices[answer]%%|*}; typeset -g $var=${choices[answer]%%|*}
+        else
+          saved[$var]=$answer; typeset -g $var=$answer
+        fi
+        print -r -- "  $label: ${(P)var}$( ollama list 2>/dev/null | awk 'NR > 1 { print $1 }' | grep -qx -- "${(P)var}" || print -n "  (not pulled yet: ollama pull ${(P)var})" )" ;;
       bool)
         if [[ ${(P)var} == 1 ]]; then saved[$var]=0; typeset -g $var=0; else saved[$var]=1; typeset -g $var=1; fi
         print -r -- "  $label: $([[ ${saved[$var]} == 1 ]] && echo on || echo off)" ;;
