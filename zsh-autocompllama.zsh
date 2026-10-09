@@ -65,6 +65,12 @@ _zsh_autocompllama_config_load
 # seconds instead of retrying on every pause.
 (( ! ${+ZSH_AUTOCOMPLLAMA_BACKOFF} )) && typeset -g ZSH_AUTOCOMPLLAMA_BACKOFF=30
 
+# Suggest on a fresh, empty line what you are likely to run next: 0 never;
+# 1 from history only (the command that failed before a login, pull or
+# install you just ran; the command that usually follows the last one); 2
+# also by asking the model when history has no answer, at the cost of a
+# model call after every command.
+(( ! ${+ZSH_AUTOCOMPLLAMA_FRESH} )) && typeset -g ZSH_AUTOCOMPLLAMA_FRESH=2
 # Up to this many history commands continuing the typed text are offered to
 # the model as candidates; it must pick one of them (or none), so this path
 # cannot invent a command. 0 disables it.
@@ -1073,6 +1079,87 @@ _zsh_autocompllama_emit() {
   print -r -- "$cmd"
 }
 
+# What to suggest on an empty line, from history alone. Takes the recent
+# commands most recent first, as _zsh_autocompllama_recent_commands prints
+# them (with their '# FAILED with exit N' and '# in dir' notes). Prints the
+# suggestion or nothing. Usage: _zsh_autocompllama_fresh_from_history <line>...
+_zsh_autocompllama_fresh_from_history() {
+  setopt localoptions extendedglob
+  (( $# )) || return 1
+  local last=${1%%  \#*} last_failed=0 before=${2%%  \#*} before_failed=0
+  [[ $1 == *'# FAILED'* ]] && last_failed=1
+  [[ $2 == *'# FAILED'* ]] && before_failed=1
+  [[ $1 == *'# in '* ]] && return 1   # ran elsewhere: no reliable pattern here
+
+  # 1. The command before the last one failed, and the last one looks like
+  #    the remedy (a login, a pull, an install, an export): try it again.
+  if (( ! last_failed && before_failed )) && [[ -n $before && $before != $last ]] && [[ $last == (aws\ sso\ login*|aws\ login*|aws\ configure*|gcloud\ auth\ *|az\ login*|gh\ auth\ login*|docker\ login*|ssh-add*|git\ pull*|git\ fetch*|git\ stash*|git\ checkout\ *|git\ switch\ *|brew\ install*|brew\ services\ *|npm\ (install|i|ci)*|pnpm\ install*|yarn(|\ install)*|pip3#\ install*|uv\ (pip\ install|sync)*|poetry\ install*|cargo\ build*|make(|\ build)*|go\ mod\ *|source\ *|.\ *|export\ *|chmod\ *|mkdir\ *|touch\ *|kubectl\ config\ use-context*|ollama\ pull*|ollama\ serve*|sudo\ *) ]]; then
+    print -r -- "$before"
+    return 0
+  fi
+
+  # 2. What usually follows the last command, when that is clear-cut.
+  local -a lines
+  local -A follow
+  local -i total=0 i
+  local l
+  if (( $+functions[_histdb_query] )); then
+    local q=$(sql_escape "$last")
+    lines=( ${(f)"$(_histdb_query "
+      select c2.argv from history h1
+      join history h2 on h2.id = (select min(h3.id) from history h3
+                                  where h3.session = h1.session and h3.id > h1.id)
+      join commands c1 on h1.command_id = c1.rowid
+      join commands c2 on h2.command_id = c2.rowid
+      where c1.argv = '$q' and c2.argv != '' and c2.argv != '$q'
+      order by h1.start_time desc limit 50")"} )
+  else
+    local -a hist; hist=( ${(f)"$(fc -ln -3000 2>/dev/null)"} )
+    for (( i = 1; i < $#hist; i++ )); do
+      [[ $hist[i] == $last && $hist[i+1] != $last ]] && lines+=( "$hist[i+1]" )
+    done
+  fi
+  for l in "${lines[@]}"; do (( follow[$l]++, total++ )); done
+  (( total >= 3 )) || return 1
+  local best= ; local -i bestn=0
+  for l in "${(k)follow[@]}"; do (( follow[$l] > bestn )) && { bestn=$follow[$l]; best=$l; }; done
+  (( bestn >= 3 && bestn * 10 >= total * 4 )) || return 1
+  print -r -- "$best"
+}
+
+# A suggestion for an empty line: history first, then (level 2) the model
+# continuing the session transcript at a fresh prompt. Same returns as
+# _zsh_autocompllama_complete.
+_zsh_autocompllama_fresh() {
+  setopt localoptions extendedglob
+  local -a recent; recent=( ${(f)"$(_zsh_autocompllama_recent_commands 3)"} )
+  (( $#recent )) || { print -u2 -r -- "zsh-autocompllama: no history to go on"; return 2; }
+  local suggestion
+  if suggestion=$(_zsh_autocompllama_fresh_from_history "${recent[@]}") && [[ -n $suggestion ]]; then
+    print -r -- "$suggestion"
+    return 0
+  fi
+  (( ZSH_AUTOCOMPLLAMA_FRESH >= 2 )) || { print -u2 -r -- "zsh-autocompllama: no pattern in history for a fresh line"; return 2; }
+  local prefix continuation
+  prefix="$(_zsh_autocompllama_transcript)"$'\n'"\$ "
+  continuation=$(_zsh_autocompllama_continue "$prefix" $'\n$ ') || return 1
+  continuation=${${continuation##[[:space:]]#}%%[[:space:]]#}
+  # A repeat of something just run is not a suggestion (retrying a failed
+  # command is the history rule's job, and it checks the exit status).
+  local -a just_ran; just_ran=( ${recent[@]%%  \#*} )
+  if [[ -z $continuation ]] || (( ${just_ran[(Ie)$continuation]} )); then
+    print -u2 -r -- "zsh-autocompllama: nothing new to suggest on a fresh line"
+    return 2
+  fi
+  local -i rc
+  _zsh_autocompllama_check_command "$continuation"; rc=$?
+  if (( rc == 1 )); then
+    print -u2 -r -- "zsh-autocompllama: rejected fresh-line suggestion ($REPLY): $continuation"
+    return 2
+  fi
+  _zsh_autocompllama_emit "$continuation" "${reply[@]}"
+}
+
 # Compute a suggestion for a partial command and print it. Today the result
 # always starts with the partial command (the candidate query and the
 # fill-in-the-middle request both guarantee it); the line editor also
@@ -1084,6 +1171,11 @@ _zsh_autocompllama_complete() {
   setopt localoptions extendedglob
   local partial=$1
   local completion
+  # An empty line is its own question: what next?
+  if [[ -z $partial ]]; then
+    _zsh_autocompllama_fresh
+    return
+  fi
   # Whatever path answers, suggesting the typed text with its trailing
   # whitespace removed is suggesting nothing.
   local trimmed=${partial%%[[:space:]]#}
@@ -1458,6 +1550,8 @@ _zsh_autocompllama_highlight() {
   elif [[ -n $_ZSH_AUTOCOMPLLAMA_SUGGESTION && -n $POSTDISPLAY &&
           "$BUFFER$POSTDISPLAY" == "$_ZSH_AUTOCOMPLLAMA_SUGGESTION" ]]; then
     base=0
+    # On an empty buffer the grey is ours to draw.
+    (( $#BUFFER == 0 )) && region_highlight+=( "0 $#POSTDISPLAY ${ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE:-fg=8} memo=zsh-autocompllama" )
   else
     return 0
   fi
@@ -1576,7 +1670,7 @@ _zsh_autocompllama_request() {
   exec {_ZSH_AUTOCOMPLLAMA_FD}< <(
     print -r -- $sysparams[pid]
     (( ZSH_AUTOCOMPLLAMA_DEBOUNCE > 0 )) && sleep $ZSH_AUTOCOMPLLAMA_DEBOUNCE
-    print -r -- START
+    [[ -n $partial ]] && print -r -- START
     local out line logline
     out=$(_zsh_autocompllama_complete "$partial" 2>&1)
     case $? in
@@ -1633,7 +1727,13 @@ _zsh_autocompllama_on_result() {
       _zsh_autocompllama_suggestion_clear
       _ZSH_AUTOCOMPLLAMA_SUGGESTION=$suggestion
       _zsh_autocompllama_marks_compute
-      if [[ $suggestion == "$pending"* ]]; then
+      if [[ -z $pending ]]; then
+        # zsh-autosuggestions will not draw on an empty buffer, but it
+        # accepts and clears whatever is in POSTDISPLAY all the same.
+        POSTDISPLAY=$suggestion
+        _zsh_autocompllama_highlight
+        zle -R
+      elif [[ $suggestion == "$pending"* ]]; then
         zle autosuggest-suggest -- "$suggestion"
         _zsh_autocompllama_highlight
         zle -R
@@ -1686,6 +1786,11 @@ _zsh_autocompllama_on_line_init() {
   if (( ! $+widgets[autosuggest-suggest] && ! _ZSH_AUTOCOMPLLAMA_WARNED )); then
     _ZSH_AUTOCOMPLLAMA_WARNED=1
     zle -M "zsh-autocompllama: zsh-autosuggestions is not loaded, so there will be no suggestions."
+  fi
+  # A fresh line: ask what comes next, unless the user is already typing.
+  if (( ZSH_AUTOCOMPLLAMA_FRESH && $+widgets[autosuggest-suggest] )) && [[ -z $BUFFER ]] &&
+     (( EPOCHSECONDS >= _ZSH_AUTOCOMPLLAMA_BACKOFF_UNTIL )); then
+    _zsh_autocompllama_request ""
   fi
 }
 
