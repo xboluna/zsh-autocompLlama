@@ -5,6 +5,8 @@
 #   zsh-autocompllama configure    choose settings interactively (saved to a
 #                                  config file the plugin reads on start)
 #   zsh-autocompllama check        verify the installation (tools, server, model)
+#   zsh-autocompllama actions      list the typed actions a sentence can be
+#                                  routed to, and which are available here
 #   zsh-autocompllama help
 #
 # Settings chosen here are written to $ZSH_AUTOCOMPLLAMA_CONFIG and apply to
@@ -22,6 +24,7 @@ _ZSH_AUTOCOMPLLAMA_SETTINGS=(
   "ZSH_OLLAMA_URL|text|http://localhost:11434|ollama server"
   "ZSH_AUTOCOMPLLAMA_MAX_NEAR|int|5|Rewrites of mistyped commands from history (0 = off)"
   "ZSH_AUTOCOMPLLAMA_INTENT|bool|1|Translate a typed description into a command"
+  "ZSH_AUTOCOMPLLAMA_ACTIONS|bool|1|Route a description to a typed action first (kill port, switch context...)"
   "ZSH_AUTOCOMPLLAMA_REPAIR|bool|1|Give the model one corrected try when a translation is rejected"
   "ZSH_AUTOCOMPLLAMA_GENERATE|bool|1|Finish a command from scratch when history has nothing"
   "ZSH_AUTOCOMPLLAMA_DEBOUNCE|text|0.15|Seconds of typing pause before asking the model"
@@ -223,14 +226,26 @@ _zsh_autocompllama_cli_configure() {
   print -r -- "Saved to ${file/#$HOME/~}. Settings apply to new shells (exec zsh); this one has them already."
 }
 
+_zsh_autocompllama_cli_actions() {
+  local name avail
+  _zsh_autocompllama_actions_prepare
+  for name in "${_ZSH_AUTOCOMPLLAMA_ACTION_NAMES[@]}"; do
+    if _zsh_autocompllama_action_available $name; then avail="available"; else avail="needs ${_ZSH_AUTOCOMPLLAMA_ACTION_NEEDS[$name]:-its handler}"; fi
+    printf '%-20s %-12s %s%s\n' "$name" "$avail" "${_ZSH_AUTOCOMPLLAMA_ACTION_DESC[$name]}" \
+      "$( (( ${_ZSH_AUTOCOMPLLAMA_ACTION_DANGER[$name]} )) && print -n ' (danger)' )"
+  done
+  print -r -- "Add your own in ${${ZSH_AUTOCOMPLLAMA_ACTIONS_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/zsh-autocompllama/actions.zsh}/#$HOME/~} (see actions.zsh for the format)."
+}
+
 zsh-autocompllama() {
   case $1 in
     ""|status) _zsh_autocompllama_cli_status ;;
     update) _zsh_autocompllama_cli_update ;;
     configure|config) shift; _zsh_autocompllama_cli_configure "$@" ;;
     check) zsh_autocompllama_check ;;
+    actions) _zsh_autocompllama_cli_actions ;;
     help|-h|--help) sed -n '3,/^$/p' "$_ZSH_AUTOCOMPLLAMA_DIR/cli.zsh" | sed 's/^# \{0,1\}//' ;;
-    *) print -u2 -r -- "zsh-autocompllama: unknown command '$1' (update, configure, check, help)"; return 2 ;;
+    *) print -u2 -r -- "zsh-autocompllama: unknown command '$1' (update, configure, check, actions, help)"; return 2 ;;
   esac
 }
 alias zsh-autocompLlama=zsh-autocompllama

@@ -32,9 +32,21 @@ you typed a sentence, the model is never allowed to just make something up:
    `gti sta` finds `git status`): the first word may be one edit away from
    one you have used, and the rest is compared by edit distance. A pick from
    these is shown as a rewrite, since it does not continue what you typed.
-3. If what you typed is not a command at all but says what you want
-   ("command to pull from this git repo", "undo my last commit but keep the
-   changes"), it translates that into a command, shown as a rewrite. This is
+3. If what you typed is not a command at all but says what you want, it
+   first tries to route it to one of a dozen **typed actions**: kill the
+   process on a port, show what is on a port, switch kubectl context, set
+   the AWS profile, start or stop a brew service, open the branch's PR, open
+   a file at a line, check out a branch by fragment, run the tests, changes
+   since a time, tail a service log, disk usage. The model only picks the
+   action and its arguments from fixed choices; plain zsh looks up the pid,
+   the branch or the log file and produces the exact command line, declining
+   rather than guessing when there is nothing to find. Only actions whose
+   tools are installed are offered, and you can add your own
+   (`zsh-autocompllama actions` lists them). Actions marked dangerous, such
+   as kill, show a red marker.
+4. Otherwise ("command to pull from this git repo", "undo my last commit but
+   keep the changes"), it translates that into a command, shown as a rewrite,
+   in the same model call. This is
    the one path where the model writes a command you may never have run, so
    it only applies to text whose first word is no command, alias or
    function (and no near miss of one), or that reads as English, and the
@@ -43,7 +55,7 @@ you typed a sentence, the model is never allowed to just make something up:
    of milliseconds to print their help, so they are not checked). When it
    does not, the model is told exactly what was wrong and gets one more
    try. You can turn either off.
-4. Only when none of that applies does it finish what you typed.
+5. Only when none of that applies does it finish what you typed.
    This is a fill-in-the-middle completion, not a chat: the model sees a
    transcript of your OS, working directory, file listing and recent commands
    ending with your partial command, followed by the next prompt line, and
@@ -167,6 +179,7 @@ zsh-autocompllama              status, and whether an update is available
 zsh-autocompllama update       pull the latest main into the plugin checkout
 zsh-autocompllama configure    choose settings interactively
 zsh-autocompllama check        verify the installation (tools, server, model)
+zsh-autocompllama actions      list the typed actions and which are available here
 ```
 
 `configure` shows each setting with its current value and where it comes
@@ -203,6 +216,9 @@ in `~/.zshrc` before the plugin loads, or through `configure`.
 | `ZSH_AUTOCOMPLLAMA_MAX_NEAR` | `5` | Near-miss history candidates offered when no history command continues the typed text. `0` disables rewrites from history. |
 | `ZSH_AUTOCOMPLLAMA_GENERATE` | `1` | Allow writing a command from scratch when no candidate fits. `0` only ever suggests commands you have run before. |
 | `ZSH_AUTOCOMPLLAMA_INTENT` | `1` | Translate a description of what you want into a command, shown as a rewrite. `0` disables. |
+| `ZSH_AUTOCOMPLLAMA_ACTIONS` | `1` | Route a description to a typed action first. `0` goes straight to translation. |
+| `ZSH_AUTOCOMPLLAMA_ACTIONS_FILE` | `~/.config/zsh-autocompllama/actions.zsh` | Your own actions, in the format described at the top of `actions.zsh`. |
+| `ZSH_AUTOCOMPLLAMA_DANGER_COLOR` | `red` | Marker colour for a routed action marked dangerous. |
 | `ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS` | `2` | Fewer words than this are never treated as a description. |
 | `ZSH_AUTOCOMPLLAMA_MAX_FILES` | `30` | Directory entries included as context. `0` disables. |
 | `ZSH_AUTOCOMPLLAMA_MAX_HISTORY` | `10` | Recent commands of this session (with directory and exit status where relevant) included as context. `0` disables. |
