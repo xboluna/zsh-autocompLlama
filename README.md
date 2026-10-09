@@ -7,7 +7,11 @@ As you type, [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggesti
 shows the best matching command from your history instantly as grey text. When
 you pause, a spinner at the right of the prompt shows a local model looking at
 your history and directory, and its pick replaces the grey text.
-Accept it with → as usual, or keep typing and it gets out of the way. A
+Accept it with → as usual, or keep typing and it gets out of the way. On an
+empty line it suggests what you are likely to run next: the command that
+failed just before the login, pull or install you then ran, the command
+that usually follows the one you just ran, or, failing those, the model's
+guess from the session so far. A
 suggestion that does not continue what you typed, a rewrite, is shown on its
 own line under the prompt instead, coloured like a diff, and accepted with
 the same → key:
@@ -202,6 +206,7 @@ in `~/.zshrc` before the plugin loads, or through `configure`.
 | `ZSH_AUTOCOMPLLAMA_LOG` | empty | File to append one line per request to (time, typed text, result). Handy when nothing shows up. |
 | `ZSH_AUTOCOMPLLAMA_BACKOFF` | `30` | Seconds to pause automatic suggestions after a failed request. |
 | `ZSH_AUTOCOMPLLAMA_MAX_CANDIDATES` | `10` | History candidates offered to the model. `0` skips straight to generation. |
+| `ZSH_AUTOCOMPLLAMA_FRESH` | `2` | Suggest on an empty line: `0` never, `1` from history patterns only, `2` also by asking the model when history has no answer (a model call after every command). |
 | `ZSH_AUTOCOMPLLAMA_MAX_NEAR` | `5` | Near-miss history candidates offered when no history command continues the typed text. `0` disables rewrites from history. |
 | `ZSH_AUTOCOMPLLAMA_GENERATE` | `1` | Allow writing a command from scratch when no candidate fits. `0` only ever suggests commands you have run before. |
 | `ZSH_AUTOCOMPLLAMA_INTENT` | `1` | Translate a description of what you want into a command, shown as a rewrite. `0` disables. |
@@ -239,6 +244,16 @@ with `zle -F`; when it reports that it has started talking to the model the
 spinner is shown, and its result is handed to `zle autosuggest-suggest` only if
 the buffer is still what it was asked about. That function:
 
+0. On an empty line (`_zsh_autocompllama_fresh`): if the command before the
+   last one failed and the last one looks like a remedy (a login, a pull, an
+   install, an export), suggests the failed command again; else if one
+   command follows the last one in history at least three times and at
+   least forty percent of the time (zsh-histdb session order, or plain
+   history), suggests it; else, at level 2, asks `/api/generate` to continue
+   the transcript at a fresh `$ ` prompt and validates the answer. The
+   plugin draws this ghost text itself, since zsh-autosuggestions will not
+   on an empty buffer, and → accepts it through zsh-autosuggestions as
+   usual. No spinner, since this runs at every prompt.
 1. Collects candidates with `_zsh_autocompllama_candidates`: history commands
    that continue the typed text, those run in this directory tree before
    others, then by frequency. The same ranking powers the `autocompllama`

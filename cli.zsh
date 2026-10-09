@@ -24,6 +24,7 @@ _ZSH_AUTOCOMPLLAMA_SETTINGS=(
   "ZSH_OLLAMA_URL|text|http://localhost:11434|ollama server"
   "ZSH_AUTOCOMPLLAMA_MAX_NEAR|int|5|Rewrites of mistyped commands from history (0 = off)"
   "ZSH_AUTOCOMPLLAMA_INTENT|bool|1|Translate a typed description into a command"
+  "ZSH_AUTOCOMPLLAMA_FRESH|choice:_zsh_autocompllama_fresh_choices|2|Suggest on an empty line what to run next"
   "ZSH_AUTOCOMPLLAMA_REPAIR|bool|1|Give the model one corrected try when a translation is rejected"
   "ZSH_AUTOCOMPLLAMA_GENERATE|bool|1|Finish a command from scratch when history has nothing"
   "ZSH_AUTOCOMPLLAMA_DEBOUNCE|text|0.15|Seconds of typing pause before asking the model"
@@ -35,6 +36,12 @@ _ZSH_AUTOCOMPLLAMA_SETTINGS=(
   "ZSH_AUTOCOMPLLAMA_LOG|text||Log file of every request (empty = off)"
   "ZSH_AUTOCOMPLLAMA_NUM_CTX|int|4096|Model context window"
 )
+
+_zsh_autocompllama_fresh_choices() {
+  print -r -- "0|never"
+  print -r -- "1|from history only: retry the command that failed before a login, pull or install; what usually follows the last command"
+  print -r -- "2|history, then ask the model (one model call after every command)"
+}
 
 # The models worth choosing between, with what each costs, marked when
 # already pulled. One 'ollama list' call.
