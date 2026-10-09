@@ -18,6 +18,7 @@
 (( ! ${+ZSH_AUTOCOMPLLAMA_CONFIG} )) && typeset -g ZSH_AUTOCOMPLLAMA_CONFIG=${XDG_CONFIG_HOME:-$HOME/.config}/zsh-autocompllama/config.zsh
 source "${${(%):-%x}:A:h}/cli.zsh"
 _zsh_autocompllama_config_load
+source "${${(%):-%x}:A:h}/actions.zsh"
 
 # ollama model. The 3B coder model answers in a few hundred ms on Apple
 # Silicon with ~2 GB resident and is the first size whose fill-ins are
@@ -86,6 +87,14 @@ _zsh_autocompllama_config_load
 # parse and name a real command and existing paths. Set to 0 to disable.
 (( ! ${+ZSH_AUTOCOMPLLAMA_INTENT} )) && typeset -g ZSH_AUTOCOMPLLAMA_INTENT=1
 (( ! ${+ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS} )) && typeset -g ZSH_AUTOCOMPLLAMA_INTENT_MIN_WORDS=2
+# Before translating a description, try to route it to one of the typed
+# actions in actions.zsh (kill the process on a port, switch kubectl
+# context, open the branch's PR...). The model only picks the action and its
+# arguments from fixed choices; plain zsh turns that into the command line,
+# so a routed suggestion is never invented. Set to 0 to skip routing.
+(( ! ${+ZSH_AUTOCOMPLLAMA_ACTIONS} )) && typeset -g ZSH_AUTOCOMPLLAMA_ACTIONS=1
+# Prompt colour of the rewrite marker for an action marked --danger.
+(( ! ${+ZSH_AUTOCOMPLLAMA_DANGER_COLOR} )) && typeset -g ZSH_AUTOCOMPLLAMA_DANGER_COLOR='red'
 # How much context to send with each request: entries of the current directory
 # listing and recent commands run in this directory tree. 0 disables either.
 (( ! ${+ZSH_AUTOCOMPLLAMA_MAX_FILES} )) && typeset -g ZSH_AUTOCOMPLLAMA_MAX_FILES=30
@@ -850,22 +859,28 @@ _zsh_autocompllama_first_word_known() {
   return 1
 }
 
-# Does <text> read as English rather than as a command? Three or more
-# words, at least two of which are function words that have no meaning in
-# shell syntax ("find the pr i opened" is a valid command line, but not one
-# anybody means). Shell keywords such as for, in, if, do are left out.
+# Does <text> read as English rather than as a command? Either three or
+# more words of which two are function words that have no meaning in shell
+# syntax ("find the pr i opened" is a valid command line, but not one
+# anybody means), or three or more words, one of them such a word, with
+# nothing that looks like shell in it: no flag, no path, no assignment, no
+# operator, no quote ("kill whatever is on port 8080" starts with a real
+# command but is a sentence; "git commit -m 'fix the thing'" is not).
+# Shell keywords such as for, in, if, do are left out of the word list.
 _zsh_autocompllama_looks_like_prose() {
   local -a words; words=( ${(z)1} )
   (( $#words >= 3 )) || return 1
   local -a function_words
   function_words=( the a an my me i this that these those please how what which
-    where who whom whose to of from with into onto all any some every )
+    where who whom whose to of from with into onto all any some every
+    is are was it its up at by and or now then whatever something anything everything )
   local w
-  local -i n=0
+  local -i n=0 shellish=0
   for w in "${words[@]}"; do
     (( ${function_words[(Ie)${(L)w}]} )) && (( ++n ))
+    [[ $w == (-*|*=*|*/*|*[\|\&\;\<\>\$\`\"\']*) ]] && shellish=1
   done
-  (( n >= 2 ))
+  (( n >= 2 || (n >= 1 && ! shellish) ))
 }
 
 # Does <text> parse as shell syntax?
@@ -1128,7 +1143,40 @@ _zsh_autocompllama_complete() {
       print -u2 -r -- "zsh-autocompllama: not a command and intent translation is off"
       return 2
     fi
-    completion=$(_zsh_autocompllama_intent "$partial") || return 1
+    # Route to a typed action first. The same call returns a free command
+    # when no action fits, so a sentence costs one model call either way.
+    local routed_cmd=
+    if (( ZSH_AUTOCOMPLLAMA_ACTIONS )); then
+      # Enum values are computed here, in this shell, so the validation
+      # below sees the same ones the model was offered.
+      _zsh_autocompllama_actions_prepare
+      local -a route; route=( "${(@f)$(_zsh_autocompllama_route "$partial" 2>/dev/null)}" )
+      if (( $#route >= 2 )); then
+        local action=$route[1] line
+        local -i arc
+        routed_cmd=$route[2]
+        if [[ $action != none && -n ${_ZSH_AUTOCOMPLLAMA_ACTION_DESC[$action]} ]]; then
+          line=$(_zsh_autocompllama_action_run "$action" "${(@)route[3,-1]}"); arc=$?
+          if (( arc == 0 )) && [[ -n $line ]]; then
+            (( ${_ZSH_AUTOCOMPLLAMA_ACTION_DANGER[$action]} )) && print -r -- "DANGER"
+            print -r -- "$line"
+            return 0
+          elif (( arc == 1 )); then
+            # The handler looked and found nothing (no process on that port,
+            # no such branch): say so rather than fall back to a guess.
+            print -u2 -r -- "zsh-autocompllama: action $action declined"
+            return 2
+          fi
+          # Arguments that make no sense for the action mean the routing
+          # was wrong: carry on to translation.
+        fi
+      fi
+    fi
+    if [[ -n $routed_cmd ]]; then
+      completion=$routed_cmd
+    else
+      completion=$(_zsh_autocompllama_intent "$partial") || return 1
+    fi
     if [[ -z $completion || $completion == $trimmed ]]; then
       print -u2 -r -- "zsh-autocompllama: no command for that from ${ZSH_OLLAMA_MODEL}"
       return 2
@@ -1361,6 +1409,8 @@ typeset -ga _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS
 # not be verified, and their "<start> <end>" offsets within it.
 typeset -g _ZSH_AUTOCOMPLLAMA_SUGGESTION
 typeset -ga _ZSH_AUTOCOMPLLAMA_UNVERIFIED _ZSH_AUTOCOMPLLAMA_MARKS
+# Set when the suggestion on screen comes from an action marked --danger.
+typeset -gi _ZSH_AUTOCOMPLLAMA_DANGER=0
 
 # Character-level diff of <a> against <b>, as spans in
 # _ZSH_AUTOCOMPLLAMA_REPLACEMENT_SPANS: characters of a that b drops
@@ -1478,8 +1528,10 @@ _zsh_autocompllama_replacement_highlight() {
   local -i split=$(( start + 1 + _ZSH_AUTOCOMPLLAMA_REPLACEMENT_INDENT ))
   local -i end=$(( start + $#_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT ))
   local style=${ZSH_AUTOCOMPLLAMA_REPLACEMENT_STYLE:-${ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE:-fg=8}}
+  local marker_color=$ZSH_AUTOCOMPLLAMA_SPINNER_COLOR
+  (( _ZSH_AUTOCOMPLLAMA_DANGER )) && marker_color=$ZSH_AUTOCOMPLLAMA_DANGER_COLOR
   region_highlight+=(
-    "$start $split fg=$ZSH_AUTOCOMPLLAMA_SPINNER_COLOR memo=zsh-autocompllama"
+    "$start $split fg=$marker_color memo=zsh-autocompllama"
     "$split $end $style memo=zsh-autocompllama"
   )
   local span
@@ -1573,6 +1625,7 @@ _zsh_autocompllama_request() {
   _zsh_autocompllama_cancel
   _ZSH_AUTOCOMPLLAMA_PENDING=$partial
   _ZSH_AUTOCOMPLLAMA_UNVERIFIED=()
+  _ZSH_AUTOCOMPLLAMA_DANGER=0
   exec {_ZSH_AUTOCOMPLLAMA_FD}< <(
     print -r -- $sysparams[pid]
     (( ZSH_AUTOCOMPLLAMA_DEBOUNCE > 0 )) && sleep $ZSH_AUTOCOMPLLAMA_DEBOUNCE
@@ -1585,6 +1638,7 @@ _zsh_autocompllama_request() {
         local -a lines unverified; lines=( ${(f)out} )
         local extra
         for extra in "${(@)lines[1,-2]}"; do
+          [[ $extra == DANGER ]] && { print -r -- DANGER; continue; }
           [[ $extra == UNVERIFIED\ * ]] || continue
           print -r -- "$extra"
           unverified+=( "${extra#UNVERIFIED }" )
@@ -1619,6 +1673,10 @@ _zsh_autocompllama_on_result() {
   fi
   if [[ $line == UNVERIFIED\ * ]]; then
     _ZSH_AUTOCOMPLLAMA_UNVERIFIED+=( "${line#UNVERIFIED }" )
+    return 0
+  fi
+  if [[ $line == DANGER ]]; then
+    _ZSH_AUTOCOMPLLAMA_DANGER=1
     return 0
   fi
 
