@@ -92,13 +92,32 @@ STRICT = ("\n\nAnswer none unless the request is exactly what one action does. S
           "Examples that are none: 'show the last 5 commits', 'undo my last commit', 'pull from this repo', "
           "'how many lines are in this file', 'compress the logs folder'.")
 
-def run_schema(model, text, think=None, strict=False):
+def schema_spec_combined():
+    sc = schema_spec()
+    # Enums are the union over actions sharing a parameter name; the eval's
+    # first version kept only the first action's enum, which made some
+    # arguments impossible to produce.
+    props = {}
+    for a in ACTIONS.values():
+        for p, spec in a["params"].items():
+            cur = props.setdefault(p, {"type": spec["type"]})
+            if "enum" in spec:
+                cur.setdefault("enum", []); cur["enum"] = sorted(set(cur["enum"]) | set(spec["enum"]))
+    sc["properties"]["args"]["properties"] = props
+    sc["properties"]["cmd"] = {"type": "string"}
+    sc["required"] = ["name", "args", "cmd"]
+    return sc
+
+def run_schema(model, text, think=None, strict=False, combined=False):
+    task = SYSTEM + "\n\nActions:\n" + actions_text() + (STRICT if strict else "")
+    if combined:
+        task += ("\n\nWhen no action fits but the text describes something a single shell command "
+                 "does, put that command in \"cmd\" with name none; otherwise cmd is an empty string.")
     body = {"model": model, "stream": False, "options": {"temperature": 0, "num_predict": 96},
-            "messages": [{"role": "system", "content": SYSTEM + "\n\nActions:\n" + actions_text() +
-                          (STRICT if strict else "") +
-                          "\n\nAnswer as JSON: {\"name\": <action or none>, \"args\": {...}}."},
+            "messages": [{"role": "system", "content": task +
+                          "\n\nAnswer as JSON: {\"name\": <action or none>, \"args\": {...}" + (", \"cmd\": ..." if combined else "") + "}."},
                          {"role": "user", "content": "Typed: " + text}],
-            "format": schema_spec()}
+            "format": schema_spec_combined() if combined else schema_spec()}
     if think is not None:
         body["think"] = think
     data, ms = post("/api/chat", body)
@@ -127,11 +146,25 @@ def run_decision(model, text, route_only=False):
             if q: args[p] = q.get("choice")
     return action, args, ms, None
 
+def run_schema_enum(text):
+    body = {"model": "qwen2.5-coder:3b", "stream": False, "options": {"temperature": 0, "num_predict": 96},
+            "messages": [{"role": "system", "content": SYSTEM + "\n\nActions:\n" + actions_text() + STRICT +
+                          "\n\nAnswer as JSON: {\"name\": <action or none>, \"args\": {...}}."},
+                         {"role": "user", "content": "Typed: " + text}],
+            "format": {**schema_spec_combined(), "required": ["name", "args"]}}
+    body["format"]["properties"].pop("cmd")
+    data, ms = post("/api/chat", body)
+    try: obj = json.loads(data["message"]["content"])
+    except Exception: return "none", {}, ms, data.get("total_duration")
+    return obj.get("name", "none"), obj.get("args") or {}, ms, data.get("total_duration")
+
 CANDIDATES = {
     "fg-tools":   lambda t: run_tools("functiongemma", t),
     "fg-schema":  lambda t: run_schema("functiongemma", t),
     "q3b-schema": lambda t: run_schema("qwen2.5-coder:3b", t),
     "q3b-strict": lambda t: run_schema("qwen2.5-coder:3b", t, strict=True),
+    "q3b-strict-enum": lambda t: run_schema("qwen2.5-coder:3b", t, strict=True, combined=False) if False else run_schema_enum(t),
+    "q3b-combined": lambda t: run_schema("qwen2.5-coder:3b", t, strict=True, combined=True),
     "q06-schema": lambda t: run_schema("qwen3:0.6b", t, think=False),
     "tev1-dec":   lambda t: run_decision("tev1:0.8b", t),
     "tev1-route": lambda t: run_decision("tev1:0.8b", t, route_only=True),

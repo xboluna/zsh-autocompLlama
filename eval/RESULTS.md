@@ -22,7 +22,9 @@ action, the metric that decides whether this feels helpful or annoying.
 | fg-tools | functiongemma 270M, native tool calling | 40.2% | 29.9% | 1/16 | 311 | 719 |
 | fg-schema | functiongemma 270M, JSON schema | 50.5% | 34.0% | 11/16 | 283 | 429 |
 | q3b-schema | qwen2.5-coder:3b, JSON schema (the plugin's model) | 90.7% | 79.4% | 6/16 | 673 | 1026 |
-| **q3b-strict** | **same, stricter "none" instruction with negative examples** | **94.8%** | **83.5%** | **2/16** | **512** | **703** |
+| q3b-strict | same, stricter "none" instruction with negative examples | 94.8% | 83.5% | 2/16 | 512 | 703 |
+| **q3b-strict-enum** | **same, with enums as the union over actions (the first run kept only one action's enum per parameter name)** | **94.8%** | **87.6%** | **2/16** | **493** | **650** |
+| q3b-combined | strict + enums, and the same call writes a free command when no action fits | 93.8% | 86.6% | 2/16 | 655 | 952 |
 | q06-schema | qwen3:0.6b, no thinking, JSON schema | 64.9% | 52.6% | 0/16 | 201 | 366 |
 | tev1-dec | tev1:0.8b, decision lane, routing + enum args in one call | 61.9% | 42.3% | 0/16 | 710 | 1039 |
 | tev1-route | tev1:0.8b, decision lane, routing question only | 47.4% | 29.9% | 0/16 | 162 | 261 |
@@ -68,8 +70,13 @@ translation path would then handle on a "none").
    accuracy, 79.4% to 83.5% fully correct, and 6 to 2 false positives, at no
    cost in in-registry sentences and with a lower median (512 ms, since a
    decisive "none" is shorter to produce). The remaining argument errors are
-   normalisation (`' prod eu cluster'` for `prod-eu`), which enum-constrained
-   schemas per action would remove.
+   normalisation (`' prod eu cluster'` for `prod-eu`): the first schema kept
+   only one action's enum per parameter name, which made some values
+   impossible. With the union of enums, full accuracy is 87.6%.
+5. **One call can route or translate.** Adding a `cmd` field for a free
+   command when no action fits keeps accuracy (93.8% / 86.6%, same two false
+   positives) at 655 ms, so a sentence that matches no action costs one
+   model call, not a routing call plus a translation call.
 
 ## Recommendation
 
