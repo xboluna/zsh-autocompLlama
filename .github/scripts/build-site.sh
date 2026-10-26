@@ -4,6 +4,7 @@
 #   llms.txt       a short index for language models (llms.txt convention)
 #   llms-full.txt  the whole project in one text file: README, install.sh
 #                  and the plugin source, for pasting into an assistant
+#   assets/        images the README shows
 # Needs python3 with the 'markdown' package for index.html; without it a
 # plain page that links to the text files is written instead.
 set -euo pipefail
@@ -76,6 +77,10 @@ cat > "$out/llms.txt" <<EOF
 - [Repository]($repo)
 EOF
 
+# ---- assets ---------------------------------------------------------------
+# Images the README links to by relative path (assets/demo.gif).
+cp -R "$root/assets" "$out/"
+
 # ---- index.html -----------------------------------------------------------
 if python3 -c 'import markdown' 2>/dev/null; then
   python3 - "$root/README.md" "$out/index.html" "$site" <<'PY'
@@ -93,6 +98,7 @@ page = f"""<!doctype html>
 @media (prefers-color-scheme: dark) {{ :root {{ --fg: #e6e6e6; --bg: #121212; --muted: #9a9a9a; --code: #1e1e1e; --line: #333; --link: #8ab4f8; }} }}
 body {{ margin: 0 auto; padding: 24px 16px 64px; max-width: 46rem; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: var(--fg); background: var(--bg); }}
 a {{ color: var(--link); }}
+img {{ max-width: 100%; height: auto; border-radius: 6px; }}
 nav {{ font-size: 14px; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 12px; margin-bottom: 24px; }}
 nav a {{ margin-right: 14px; }}
 pre {{ background: var(--code); padding: 12px 14px; overflow-x: auto; border-radius: 6px; font-size: 13.5px; line-height: 1.45; }}
