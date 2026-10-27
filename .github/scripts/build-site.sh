@@ -55,6 +55,14 @@ mkdir -p "$out"
   echo '```zsh'
   cat "$root/cli.zsh"
   echo '```'
+  echo
+  echo "---"
+  echo
+  echo "# tui.zsh (the arrow-key prompts used by configure)"
+  echo
+  echo '```zsh'
+  cat "$root/tui.zsh"
+  echo '```'
 } > "$out/llms-full.txt"
 
 # ---- llms.txt -------------------------------------------------------------

@@ -2,7 +2,7 @@
 #
 #   zsh-autocompllama              status, and whether an update is available
 #   zsh-autocompllama update       pull the latest main into the plugin checkout
-#   zsh-autocompllama configure    choose settings interactively (saved to a
+#   zsh-autocompllama configure    choose settings with the arrow keys (saved to a
 #                                  config file the plugin reads on start)
 #   zsh-autocompllama check        verify the installation (tools, server, model)
 #   zsh-autocompllama help
@@ -13,6 +13,7 @@
 
 # Where the plugin lives (resolved through the oh-my-zsh symlink, if any).
 typeset -g _ZSH_AUTOCOMPLLAMA_DIR=${${(%):-%x}:A:h}
+source "$_ZSH_AUTOCOMPLLAMA_DIR/tui.zsh"
 
 # The settings the command offers: variable, kind, default, one-line label.
 # Kinds: bool (1/0), int, text, onoff (on = the default string, off = empty),
@@ -204,7 +205,136 @@ _zsh_autocompllama_cli_configure() {
     *) print -u2 -r -- "usage: zsh-autocompllama configure [list | set VAR VALUE | reset [VAR|--all] | edit]"; return 2 ;;
   esac
 
-  # Interactive: a numbered list; pick a number to toggle or change it.
+  # Interactive: arrow keys in a terminal, a numbered list otherwise (piped
+  # input, dumb terminals).
+  if [[ -t 0 && -t 1 && $TERM != dumb ]]; then
+    _zsh_autocompllama_configure_tui
+  else
+    _zsh_autocompllama_configure_plain
+  fi
+}
+
+# The value of setting <var> of <kind> as shown in the menus. Result in REPLY.
+_zsh_autocompllama_setting_display() {
+  local var=$1 kind=$2 value=${(P)1}
+  case $kind in
+    bool) [[ $value == 1 ]] && REPLY=on || REPLY=off ;;
+    onoff) [[ -n $value ]] && REPLY=on || REPLY=off ;;
+    *) REPLY=${value:-(empty)} ;;
+  esac
+}
+
+# The arrow-key settings screen. Uses $file and $saved from
+# _zsh_autocompllama_cli_configure (dynamic scope) and saves each change
+# as it is made.
+_zsh_autocompllama_configure_tui() {
+  setopt localoptions extendedglob
+  local entry var kind default label n
+  local -a vars kinds defaults labels rcline
+  for entry in "${_ZSH_AUTOCOMPLLAMA_SETTINGS[@]}"; do
+    IFS='|' read -r var kind default label <<< "$entry"
+    vars+=( $var ); kinds+=( $kind ); defaults+=( "$default" ); labels+=( "$label" )
+    n=$(_zsh_autocompllama_in_zshrc $var) || n=
+    rcline+=( "$n" )
+  done
+  local -i idx=1 i count=$#vars changed=0 w=$(( ${COLUMNS:-80} - 1 )) labw valw=22
+  labw=$(( w - valw - 14 )); (( labw > 50 )) && labw=50; (( labw < 16 )) && labw=16
+  local notice= value source shown line new
+  local -a lines
+  _zal_begin
+  {
+  while true; do
+    _zal_fit "zsh-autocompllama settings" $w
+    lines=( "${_ZAL_B}${REPLY}${_ZAL_R}  ${_ZAL_D}↑↓ move · ⏎ change · r reset · q done${_ZAL_R}" "" )
+    for (( i = 1; i <= count; i++ )); do
+      _zal_fit "${labels[i]}" $labw; label=${(r:labw:)REPLY}
+      _zsh_autocompllama_setting_display ${vars[i]} ${kinds[i]}; _zal_fit "$REPLY" $valw; value=${(r:valw:)REPLY}
+      if [[ -n ${rcline[i]} ]]; then source="zshrc"
+      elif (( ${+saved[${vars[i]}]} )); then source="set"
+      else source="default"; fi
+      if (( i == idx )); then
+        line="${_ZAL_C}❯ ${_ZAL_B}${label}${_ZAL_R}  ${_ZAL_C}${value}${_ZAL_R}  ${_ZAL_D}${source}${_ZAL_R}"
+      else
+        line="  ${label}  ${value}  ${_ZAL_D}${source}${_ZAL_R}"
+      fi
+      lines+=( "$line" )
+    done
+    lines+=( "" )
+    if [[ -n $notice ]]; then
+      _zal_fit "$notice" $(( w - 2 )); lines+=( "  ${REPLY}" )
+    elif [[ -n ${rcline[idx]} ]]; then
+      _zal_fit "${vars[idx]} is set in ~/.zshrc (line ${rcline[idx]}), which wins; change it there" $(( w - 2 ))
+      lines+=( "  ${_ZAL_Y}${REPLY}${_ZAL_R}" )
+    else
+      _zal_fit "${vars[idx]} · default ${defaults[idx]:-(empty)}" $(( w - 2 ))
+      lines+=( "  ${_ZAL_D}${REPLY}${_ZAL_R}" )
+    fi
+    _zal_frame "${lines[@]}"
+
+    _zal_key
+    notice=
+    var=${vars[idx]} kind=${kinds[idx]} default=${defaults[idx]} label=${labels[idx]}
+    case $REPLY in
+      up|char:k) (( idx = idx > 1 ? idx - 1 : count )); continue ;;
+      down|char:j|tab) (( idx = idx < count ? idx + 1 : 1 )); continue ;;
+      esc|quit|char:q) break ;;
+      char:r)
+        [[ -n ${rcline[idx]} ]] && continue
+        unset "saved[$var]"; typeset -g $var=$default
+        ;;
+      enter|space|right|char:l)
+        [[ -n ${rcline[idx]} ]] && continue
+        case $kind in
+          bool) [[ ${(P)var} == 1 ]] && new=0 || new=1 ;;
+          onoff) [[ -n ${(P)var} ]] && new= || new=$default ;;
+          choice:_zsh_autocompllama_model_choices)
+            _zal_model "${(P)var}" || continue
+            new=$REPLY ;;
+          choice:*)
+            _zal_select "$label" "${(P)var}" ${(f)"$(${kind#choice:})"} || continue
+            new=$REPLY ;;
+          *)
+            _zal_input "$label" "${(P)var}" $kind "default: ${default:-(empty)}" || continue
+            new=$REPLY ;;
+        esac
+        saved[$var]=$new; typeset -g $var=$new
+        ;;
+      *) continue ;;
+    esac
+    if _zsh_autocompllama_config_write "$file" saved; then
+      changed=1
+      _zsh_autocompllama_setting_display $var $kind
+      notice="${_ZAL_G}✓${_ZAL_R} ${label}: ${REPLY}"
+      if [[ $var == ZSH_OLLAMA_MODEL ]] && ! ollama list 2>/dev/null | awk 'NR > 1 { print $1 }' | grep -qx -- "${(P)var}"; then
+        if _zal_confirm "${(P)var} is not pulled yet. Pull it now?" y; then
+          _zal_end "${_ZAL_D}ollama pull ${(P)var}${_ZAL_R}"
+          if ollama pull "${(P)var}"; then notice="${_ZAL_G}✓${_ZAL_R} pulled ${(P)var}"
+          else notice="${_ZAL_Y}pull failed; run: ollama pull ${(P)var}${_ZAL_R}"; fi
+          print
+          _zal_begin
+        else
+          notice="${_ZAL_Y}${(P)var} saved, not pulled: run ollama pull ${(P)var}${_ZAL_R}"
+        fi
+      fi
+    else
+      notice="${_ZAL_Y}could not write ${file/#$HOME/~}${_ZAL_R}"
+    fi
+  done
+  if (( changed )); then
+    _zal_end "${_ZAL_G}✓${_ZAL_R} Saved to ${file/#$HOME/~}. New shells pick it up (or: exec zsh)."
+  else
+    _zal_end "${_ZAL_D}No changes.${_ZAL_R}"
+  fi
+  } always {
+    # However this ends, the terminal gets its echo, line editing and
+    # cursor back.
+    _zal_restore
+  }
+}
+
+# The numbered fallback, for when input is not a terminal.
+_zsh_autocompllama_configure_plain() {
+  local entry var kind default label
   local -i i choice
   local answer
   while true; do

@@ -50,11 +50,14 @@ The service ships with a few commands to verify and configure your installation.
 ```
 zsh-autocompllama              status, and whether an update is available
 zsh-autocompllama update       pull the latest main into the plugin checkout
-zsh-autocompllama configure    choose settings interactively
+zsh-autocompllama configure    choose settings with the arrow keys
 zsh-autocompllama check        verify the installation (tools, server, model)
 ```
 
 It's highly configurable! There are over 30 knobs to tweak, from the model to the spinner.
+`configure` lists the common ones: move with ↑↓, press Enter to toggle or edit, `r` to
+reset, `q` to finish. For the model, type to filter what you have pulled, or search
+ollama.com and pick a size; it offers to pull a model you don't have yet.
 
 ## Acknowledgements
 
