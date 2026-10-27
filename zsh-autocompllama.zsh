@@ -638,11 +638,17 @@ _zsh_autocompllama_transcript() {
   local -a lines
   lines=( ${(f)"$(_zsh_autocompllama_recent_commands $ZSH_AUTOCOMPLLAMA_MAX_HISTORY)"} )
   local l
+  local note
   for l in "${(Oa)lines[@]}"; do
-    # The 'ran elsewhere' note is for the chat context; a small model
-    # continuing a transcript copies it into its answer.
-    l=${l%%  \# in *}
+    # The notes are for the chat context; a small model continuing a
+    # transcript copies anything after the command into its answer. The
+    # failure still matters, so it goes on a line of its own, as the
+    # shell's own output would.
+    note=
+    [[ $l == *'  # FAILED with exit '* ]] && note="# exit status ${${l##*  \# FAILED with exit }%%  \#*}"
+    l=${l%%  \#*}
     print -r -- "\$ ${l[1,120]}${l[121,-1]:+…}"
+    [[ -n $note ]] && print -r -- "$note"
   done
 }
 
@@ -837,6 +843,7 @@ or an empty string if there is none."
   cmd=$(printf '%s' "$reply" | jq -r '.cmd // empty' 2>/dev/null)
   cmd=${cmd##[[:space:]]#}; cmd=${cmd%%[[:space:]]#}
   cmd=${cmd#\$ }
+  _zsh_autocompllama_strip_comment "$cmd"; cmd=$REPLY
   # Reject nothing, several lines, or an unfinished line (trailing backslash).
   [[ -n $cmd && $cmd != *$'\n'* && $cmd != *\\ ]] || return 0
   print -r -- "$cmd"
@@ -1082,6 +1089,32 @@ _zsh_autocompllama_emit() {
   print -r -- "$cmd"
 }
 
+# Drop a trailing comment from a generated command line: a '#' preceded by
+# whitespace and outside quotes, and everything after it. Models append
+# explanations there ('# list files'); the user never asked for them and
+# in an interactive zsh without interactive_comments they are arguments.
+# Result in REPLY.
+_zsh_autocompllama_strip_comment() {
+  setopt localoptions extendedglob
+  local line=$1 c quote=
+  local -i n=$#line i
+  REPLY=$line
+  for (( i = 1; i <= n; i++ )); do
+    c=$line[i]
+    if [[ -n $quote ]]; then
+      [[ $c == $quote ]] && quote=
+      [[ $c == '\\' && $quote == '"' ]] && (( i++ ))
+    elif [[ $c == '\\' ]]; then
+      (( i++ ))
+    elif [[ $c == [\"\'] ]]; then
+      quote=$c
+    elif [[ $c == '#' ]] && (( i > 1 )) && [[ $line[i-1] == [[:space:]] ]]; then
+      REPLY=${${line[1,i-1]}%%[[:space:]]#}
+      return 0
+    fi
+  done
+}
+
 # Tell the line editor that the model is now being consulted, so it shows
 # the spinner. Only meaningful inside the request child, which opens fd 3
 # to the parent for it; elsewhere this is a no-op.
@@ -1156,10 +1189,10 @@ _zsh_autocompllama_fresh() {
   prefix="$(_zsh_autocompllama_transcript)"$'\n'"\$ "
   continuation=$(_zsh_autocompllama_continue "$prefix" $'\n$ ') || return 1
   continuation=${${continuation##[[:space:]]#}%%[[:space:]]#}
-  # The model sometimes answers with a prompt marker or copies a trailing
-  # note from the transcript; neither is part of a command.
+  # The model sometimes answers with a prompt marker or a comment; neither
+  # is part of a command.
   continuation=${continuation#\$ }
-  continuation=${${continuation%%  \#*}%%[[:space:]]#}
+  _zsh_autocompllama_strip_comment "$continuation"; continuation=$REPLY
   # A repeat of something just run is not a suggestion (retrying a failed
   # command is the history rule's job, and it checks the exit status).
   local -a just_ran; just_ran=( ${recent[@]%%  \#*} )
@@ -1333,6 +1366,15 @@ or an empty string if none does."
     return 2
   fi
   completion="${partial}${continuation}"
+  # A comment the model tacked on is not part of the suggestion (one the
+  # user typed stays, since only the part after the typed text can go).
+  _zsh_autocompllama_strip_comment "$completion"
+  [[ $REPLY == "$partial"* ]] && completion=$REPLY
+  continuation=${completion#"$partial"}
+  if [[ -z $continuation ]]; then
+    print -u2 -r -- "zsh-autocompllama: no completion from ${ZSH_OLLAMA_MODEL}"
+    return 2
+  fi
   local -i rc
   _zsh_autocompllama_check_command "$completion"; rc=$?
   if (( rc == 1 )); then
