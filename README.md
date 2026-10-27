@@ -3,6 +3,8 @@
 Local AI command completion for zsh, powered by [ollama](https://ollama.com), your
 command history and the directory you are in.
 
+![zsh-autocompLlama turning plain English, a half-typed command and a typo into real commands](assets/demo.gif)
+
 As you type, [zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions)
 shows the best matching command from your history instantly as grey text. When
 you pause, a spinner at the right of the prompt shows a local model looking at
