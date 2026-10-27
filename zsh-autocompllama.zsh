@@ -1296,7 +1296,7 @@ _zsh_autocompllama_complete() {
       if (( $#route >= 2 )); then
         local action=$route[1] line
         local -i arc
-        routed_cmd=$route[2]
+        _zsh_autocompllama_strip_comment "$route[2]"; routed_cmd=$REPLY
         if [[ $action != none && -n ${_ZSH_AUTOCOMPLLAMA_ACTION_DESC[$action]} ]]; then
           line=$(_zsh_autocompllama_action_run "$action" "${(@)route[3,-1]}"); arc=$?
           if (( arc == 0 )) && [[ -n $line ]]; then
