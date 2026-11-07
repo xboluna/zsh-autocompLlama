@@ -1,4 +1,4 @@
-# zsh-autocompllama
+# <img src="assets/icon.svg" alt="" width="40" height="40" align="top"> zsh-autocompllama
 
 Local AI command completion for zsh, powered by [ollama](https://ollama.com), your
 command history and your directory context.

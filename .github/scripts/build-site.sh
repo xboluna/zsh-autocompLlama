@@ -4,7 +4,7 @@
 #   llms.txt       a short index for language models (llms.txt convention)
 #   llms-full.txt  the whole project in one text file: README, install.sh
 #                  and the plugin source, for pasting into an assistant
-#   assets/        images the README shows
+#   assets/        images the README shows, and the site icon
 # Needs python3 with the 'markdown' package for index.html; without it a
 # plain page that links to the text files is written instead.
 set -euo pipefail
@@ -101,6 +101,8 @@ page = f"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>zsh-autocompLlama</title>
 <link rel="alternate" type="text/plain" href="{site}/llms-full.txt" title="llms-full.txt">
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <style>
 :root {{ color-scheme: light dark; --fg: #1b1b1b; --bg: #fff; --muted: #666; --code: #f3f3f3; --line: #ddd; --link: #0b57d0; }}
 @media (prefers-color-scheme: dark) {{ :root {{ --fg: #e6e6e6; --bg: #121212; --muted: #9a9a9a; --code: #1e1e1e; --line: #333; --link: #8ab4f8; }} }}
@@ -114,7 +116,7 @@ code {{ font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; f
 :not(pre) > code {{ background: var(--code); padding: 1px 5px; border-radius: 4px; }}
 table {{ border-collapse: collapse; width: 100%; font-size: 14px; display: block; overflow-x: auto; }}
 th, td {{ text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }}
-h1, h2, h3 {{ line-height: 1.25; }} h2 {{ margin-top: 2.2em; }}
+h1, h2, h3 {{ line-height: 1.25; }} h1 img {{ vertical-align: -0.2em; margin-right: 6px; border-radius: 9px; }} h2 {{ margin-top: 2.2em; }}
 </style></head><body>
 <nav><a href="{site}/llms-full.txt">llms-full.txt</a><a href="{site}/llms.txt">llms.txt</a><a href="https://github.com/xboluna/zsh-autocompLlama">GitHub</a></nav>
 {body}
@@ -125,6 +127,7 @@ PY
 else
   cat > "$out/index.html" <<EOF
 <!doctype html><meta charset="utf-8"><title>zsh-autocompLlama</title>
+<link rel="icon" href="assets/icon.svg" type="image/svg+xml">
 <p>zsh-autocompLlama: see the <a href="$repo">repository</a>,
 <a href="llms-full.txt">llms-full.txt</a> or <a href="llms.txt">llms.txt</a>.</p>
 EOF
