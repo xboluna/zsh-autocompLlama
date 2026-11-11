@@ -68,10 +68,16 @@ _zal_fit() {
 }
 
 # Read one key and name it in REPLY: up down left right enter space tab
-# backspace kill esc quit, or char:<c> for anything printable.
+# backspace kill esc quit, or char:<c> for anything printable. With a
+# timeout in seconds, REPLY is tick when no key arrives in that time (for
+# screens that refresh on their own).
 _zal_key() {
   local k k2 k3 rest
-  read -sk 1 k || { REPLY=quit; return }
+  if [[ -n $1 ]]; then
+    read -sk 1 -t $1 k || { REPLY=tick; return }
+  else
+    read -sk 1 k || { REPLY=quit; return }
+  fi
   case $k in
     $'\e')
       if read -sk 1 -t 0.05 k2; then
@@ -246,14 +252,14 @@ _zal_ollama_tags() {
 # Pick a model. Typing filters the pulled models and the usual sizes;
 # Tab completes to the highlighted one; the typed text can be used as is;
 # the last row searches ollama.com for it. The name is in REPLY; returns 1
-# on Esc. Usage: _zal_model <current>
+# on Esc. Usage: _zal_model <current> [<function printing the usual sizes>]
 _zal_model() {
   setopt localoptions extendedglob
-  local current=$1 query= notice=
+  local current=$1 choices=${2:-_zsh_autocompllama_model_choices} query= notice=
   local -a names notes pulled
   pulled=( ${(f)"$(ollama list 2>/dev/null | awk 'NR > 1 { print $1 }')"} )
   local entry m
-  for entry in ${(f)"$(_zsh_autocompllama_model_choices)"}; do
+  for entry in ${(f)"$($choices)"}; do
     names+=( "${entry%%|*}" ); notes+=( "${entry#*|}" )
   done
   for m in "${pulled[@]}"; do

@@ -36,6 +36,10 @@
 # is not fed to another, so rules cannot loop. A test is a command line and
 # what the rules must make of it (itself when it must be left alone, empty
 # when it must be blocked); tests check that and how long it took.
+#
+# Rules are written by hand ('zsh-autocompllama rules add', or an editor) or
+# by a model from an instruction (jobs.zsh). The screen that shows them is
+# in rules-tui.zsh.
 
 zmodload zsh/datetime zsh/stat
 
@@ -56,12 +60,12 @@ typeset -g _ZSH_AUTOCOMPLLAMA_RULES_STAMP
 # Loading
 # ---------------------------------------------------------------------------
 
-# Names, sizes and modification times of the rule files, in REPLY: the
-# rules are reloaded when this changes.
+# The rules directory and the names, sizes and modification times of the
+# rule files, in REPLY: the rules are reloaded when this changes.
 _zsh_autocompllama_rules_stamp() {
   local f
   local -A st
-  REPLY=
+  REPLY="$ZSH_AUTOCOMPLLAMA_RULES_DIR "
   for f in $ZSH_AUTOCOMPLLAMA_RULES_DIR/*.json(N); do
     zstat -H st -- "$f" 2>/dev/null && REPLY+="${f:t}:$st[mtime]:$st[size] "
   done
@@ -147,9 +151,13 @@ _zsh_autocompllama_rules_load() {
 
   local cache=${XDG_CACHE_HOME:-$HOME/.cache}/zsh-autocompllama/rules.tsv
   local -a rows
-  [[ -r $cache ]] && rows=( "${(@f)$(<$cache)}" )
+  [[ -r $cache && -z $_ZSH_AUTOCOMPLLAMA_RULES_NOCACHE ]] && rows=( "${(@f)$(<$cache)}" )
   if [[ $rows[1] == $_ZSH_AUTOCOMPLLAMA_RULES_STAMP ]]; then
     rows=( "${(@)rows[2,-1]}" )
+  elif [[ -n $_ZSH_AUTOCOMPLLAMA_RULES_NOCACHE ]]; then
+    # A builder trying a candidate in its staging directory: not worth
+    # caching, and not to displace the cache of the real rules.
+    rows=( ${(f)"$(_zsh_autocompllama_rules_rows "${files[@]}" 2>/dev/null)"} )
   else
     rows=( ${(f)"$(_zsh_autocompllama_rules_rows "${files[@]}" 2>/dev/null)"} )
     mkdir -p "${cache:h}" 2>/dev/null &&
@@ -353,6 +361,24 @@ _zsh_autocompllama_rules_file() {
   return 1
 }
 
+# A file name for a rule out of what it says, not one already taken, in
+# REPLY. Usage: _zsh_autocompllama_rules_name <type> <from|pattern|text> [<to> [<command>]]
+_zsh_autocompllama_rules_name() {
+  setopt localoptions extendedglob
+  local name
+  case $1 in
+    command) name="$2-to-$3" ;;
+    argument) name="${4:+$4-}$2-to-${3:-nothing}" ;;
+    block) name="never-$2" ;;
+    *) name="$1-${(L)2[1,24]}" ;;
+  esac
+  name=${${name//[^A-Za-z0-9._-]##/-}##-#}; name=${${name[1,40]%%-#}:-rule}
+  local base=$name
+  local -i n=1
+  while [[ -e $ZSH_AUTOCOMPLLAMA_RULES_DIR/$name.json ]]; do name="$base-$(( ++n ))"; done
+  REPLY=$name
+}
+
 # Write a new rule file and print its name. A command or argument rule
 # starts with the two tests anyone would write first: that it rewrites,
 # and that it leaves the same word alone elsewhere.
@@ -366,13 +392,11 @@ _zsh_autocompllama_rules_add() {
   case $type in
     command)
       [[ -n $a && -n $b ]] || { print -u2 -r -- "usage: rules add command <from> <to>"; return 2; }
-      name="$a-to-$b"
       rule=$(jq -cn --arg from "$a" --arg to "$b" '{type: "command", from: $from, to: $to}')
       tests=$(jq -cn --arg from "$a" --arg to "$b" \
         '[{input: "\($from) file", expect: "\($to) file"}, {input: "echo \($from)", expect: "echo \($from)"}]') ;;
     argument)
       [[ -n $a && $# -ge 3 ]] || { print -u2 -r -- "usage: rules add argument <from> <to> [<command>]"; return 2; }
-      name="${c:+$c-}$a-to-${b:-nothing}"
       rule=$(jq -cn --arg from "$a" --arg to "$b" --arg command "$c" \
         '{type: "argument", from: $from, to: $to} + (if $command != "" then {command: $command} else {} end)')
       tests=$(jq -cn --arg from "$a" --arg to "$b" --arg command "${c:-cmd}" \
@@ -380,19 +404,14 @@ _zsh_autocompllama_rules_add() {
           {input: "\($from) x", expect: "\($from) x"}]') ;;
     block)
       [[ -n $a ]] || { print -u2 -r -- "usage: rules add block <pattern>"; return 2; }
-      name="never-$a"
       rule=$(jq -cn --arg pattern "$a" '{type: "block", pattern: $pattern}') ;;
     hint)
       [[ -n $a ]] || { print -u2 -r -- "usage: rules add hint <text>"; return 2; }
-      name="hint-$a"
       rule=$(jq -cn --arg text "$a" '{type: "hint", text: $text}') ;;
     *) print -u2 -r -- "rule types: command, argument, block, hint"; return 2 ;;
   esac
-  # A file name out of whatever the rule says, and not one already taken.
-  name=${${name//[^A-Za-z0-9._-]##/-}##-#}; name=${${name[1,40]%%-#}:-rule}
-  local dir=$ZSH_AUTOCOMPLLAMA_RULES_DIR base=$name
-  local -i n=1
-  while [[ -e $dir/$name.json ]]; do name="$base-$(( ++n ))"; done
+  _zsh_autocompllama_rules_name $type "$a" "$b" "$c"; name=$REPLY
+  local dir=$ZSH_AUTOCOMPLLAMA_RULES_DIR
   mkdir -p "$dir" || return 1
   jq -n --argjson rule "$rule" --argjson tests "$tests" --arg created "$(date +%F)" \
     '{instruction: "", enabled: true, rule: $rule, tests: $tests, source: "manual", created: $created}' \
@@ -469,6 +488,7 @@ _zsh_autocompllama_cli_rules() {
         done
       done
       return $failed ;;
+    build|jobs|log|stop|redrive) _zsh_autocompllama_cli_jobs $sub "$@" ;;
     try)
       [[ -n $1 ]] || { print -u2 -r -- "usage: zsh-autocompllama rules try <command line>"; return 2; }
       _zsh_autocompllama_rules_apply "$*"
@@ -492,170 +512,15 @@ _zsh_autocompllama_cli_rules() {
       _zsh_autocompllama_cli_rules test "$1" ;;
     *)
       print -u2 -r -- "usage: zsh-autocompllama rules [list | add <type> ... | test [<name>] | try <command line> |"
-      print -u2 -r -- "                                enable <name> | disable <name> | edit <name> | rm <name>]"
+      print -u2 -r -- "                                enable <name> | disable <name> | edit <name> | rm <name> |"
+      print -u2 -r -- "                                build <instruction> | jobs | log <build> | stop <build> | redrive <rule or build>]"
       print -u2 -r -- "  add command <from> <to>              the command <from> becomes <to>"
       print -u2 -r -- "  add argument <from> <to> [<command>] the argument <from> becomes <to> (\"\" drops it)"
       print -u2 -r -- "  add block <pattern>                  never suggest a command matching the zsh pattern"
       print -u2 -r -- "  add hint <text>                      a preference passed to the model"
+      print -u2 -r -- "  build <instruction> [<typed> [<suggested>]]"
+      print -u2 -r -- "                                       let the rule model write a rule, in the background"
+      print -u2 -r -- "  redrive <rule> [<what was wrong>]    build a rule again; redrive <build> runs a build again"
       [[ $sub == (help|-h|--help) ]] || return 2 ;;
   esac
-}
-
-# The rules screen: every rule with its state, what it does and how its
-# tests fare; Enter for the detail of one. Tests are run when the screen
-# opens and again after every change (they take milliseconds).
-_zsh_autocompllama_rules_tui() {
-  setopt localoptions extendedglob
-  local dir=$ZSH_AUTOCOMPLLAMA_RULES_DIR
-  local -A results          # rule name -> its test result lines
-  local -a names states types summaries instructions lines f tl
-  local -i idx=1 i n top fresh=1 w window namew sumw
-  local notice= row name mark tests line hint key kind a b c
-  _zal_begin
-  {
-  while true; do
-    if (( fresh )); then
-      _zsh_autocompllama_rules_load
-      names=() states=() types=() summaries=() instructions=() results=()
-      for row in "${_ZSH_AUTOCOMPLLAMA_RULE_LIST[@]}"; do
-        f=( "${(@ps:\t:)row}" )
-        names+=( "$f[1]" ); states+=( "$f[2]" ); types+=( "$f[3]" ); summaries+=( "$f[4]" ); instructions+=( "$f[6]" )
-        results[$f[1]]=$(_zsh_autocompllama_rules_test "$f[1]")
-      done
-      fresh=0
-    fi
-    n=$#names
-    (( idx > n )) && idx=$n
-    (( idx < 1 )) && idx=1
-    w=$(( ${COLUMNS:-80} - 1 )); window=$(( ${LINES:-24} - 6 )); (( window < 3 )) && window=3
-    namew=$(( w / 4 )); (( namew > 28 )) && namew=28
-    sumw=$(( w - namew - 26 )); (( sumw < 10 )) && sumw=10
-
-    _zal_fit "↑↓ move · ⏎ details · space on/off · t test · n new · e edit · d delete · q done" $(( w - 7 ))
-    lines=( "${_ZAL_B}Rules${_ZAL_R}  ${_ZAL_D}${REPLY}${_ZAL_R}" "" )
-    if (( ! n )); then
-      lines+=( "  ${_ZAL_D}No rules yet. Press n to add one.${_ZAL_R}" )
-    else
-      _zal_scroll $idx $n $window; top=$REPLY
-      for (( i = top; i < top + window && i <= n; i++ )); do
-        tl=( ${(f)results[${names[i]}]} )
-        if _zsh_autocompllama_rules_test_summary "${tl[@]}"; then tests=$REPLY; mark="${_ZAL_G}✓${_ZAL_R}"
-        else tests=$REPLY; mark="${_ZAL_Y}✗${_ZAL_R}"; fi
-        case ${states[i]} in
-          disabled) mark="${_ZAL_D}○${_ZAL_R}" ;;
-          enabled) ;;
-          *) mark="${_ZAL_Y}✗${_ZAL_R}"; tests=${states[i]%%:*} ;;
-        esac
-        _zal_fit "${names[i]}" $namew; name=${(r:namew:)REPLY}
-        _zal_fit "${summaries[i]}" $sumw; row=${(r:sumw:)REPLY}
-        if (( i == idx )); then
-          lines+=( "${_ZAL_C}❯${_ZAL_R} ${mark} ${_ZAL_B}${name}${_ZAL_R}  ${row}  ${_ZAL_D}${tests}${_ZAL_R}" )
-        else
-          lines+=( "  ${mark} ${name}  ${row}  ${_ZAL_D}${tests}${_ZAL_R}" )
-        fi
-      done
-    fi
-    lines+=( "" )
-    if [[ -n $notice ]]; then
-      lines+=( "  ${notice}" )
-    elif (( n )) && [[ ${states[idx]} == *:* ]]; then
-      _zal_fit "${states[idx]}" $(( w - 2 )); lines+=( "  ${_ZAL_Y}${REPLY}${_ZAL_R}" )
-    elif (( n )) && [[ -n ${instructions[idx]} ]]; then
-      _zal_fit "“${instructions[idx]}”" $(( w - 2 )); lines+=( "  ${_ZAL_D}${REPLY}${_ZAL_R}" )
-    else
-      _zal_fit "${dir/#$HOME/~}" $(( w - 2 )); lines+=( "  ${_ZAL_D}${REPLY}${_ZAL_R}" )
-    fi
-    _zal_frame "${lines[@]}"
-
-    _zal_key; key=$REPLY
-    notice=
-    name=${names[idx]}
-    case $key in
-      up|char:k) (( n )) && (( idx = idx > 1 ? idx - 1 : n )) ;;
-      down|char:j|tab) (( n )) && (( idx = idx < n ? idx + 1 : 1 )) ;;
-      esc|quit|char:q) break ;;
-      char:t) fresh=1; notice="${_ZAL_G}✓${_ZAL_R} tests rerun" ;;
-      space)
-        (( n )) || continue
-        if [[ ${states[idx]} == disabled ]]; then _zsh_autocompllama_rules_enable "$name" 1 2>/dev/null
-        else _zsh_autocompllama_rules_enable "$name" 0 2>/dev/null; fi ||
-          notice="${_ZAL_Y}could not rewrite $name.json${_ZAL_R}"
-        fresh=1 ;;
-      char:d)
-        (( n )) || continue
-        if _zal_confirm "Delete the rule $name?" n; then
-          rm -- "$dir/$name.json" && notice="${_ZAL_G}✓${_ZAL_R} deleted $name"
-          fresh=1
-        fi ;;
-      char:e)
-        (( n )) || continue
-        _zal_end "${_ZAL_D}editing ${dir/#$HOME/~}/$name.json${_ZAL_R}"
-        ${=${VISUAL:-${EDITOR:-vi}}} "$dir/$name.json" </dev/tty
-        _zal_begin
-        fresh=1 ;;
-      char:n)
-        _zal_select "New rule" command \
-          "command|a command becomes another: vim → nvim" \
-          "argument|an argument becomes another, or is dropped: master → main" \
-          "block|never suggest commands matching a pattern" \
-          "hint|a preference passed to the model" || continue
-        kind=$REPLY a= b= c=
-        case $kind in
-          command)
-            _zal_input "Command to replace" "" text "one word, e.g. vim" || continue; a=$REPLY
-            _zal_input "Replace $a with" "" text "e.g. nvim" || continue; b=$REPLY ;;
-          argument)
-            _zal_input "Argument to replace" "" text "one word, e.g. master" || continue; a=$REPLY
-            _zal_input "Replace $a with" "" text "empty drops the word" || continue; b=$REPLY
-            _zal_input "Only for the command" "" text "empty for any command" || continue; c=$REPLY ;;
-          block)
-            _zal_input "Never suggest commands matching" "" text "a zsh pattern for the whole line, e.g. git push*--force*" || continue
-            a=$REPLY ;;
-          hint)
-            _zal_input "Preference" "" text "e.g. prefer rg over grep" || continue; a=$REPLY ;;
-        esac
-        if name=$(_zsh_autocompllama_rules_add $kind "$a" "$b" "$c" 2>/dev/null); then
-          notice="${_ZAL_G}✓${_ZAL_R} added $name"
-        else
-          notice="${_ZAL_Y}not added: a $kind rule needs its fields filled in${_ZAL_R}"
-        fi
-        fresh=1 ;;
-      enter|right|char:l)
-        (( n )) || continue
-        # The detail of one rule, until a key other than t.
-        while true; do
-          tl=( ${(f)results[$name]} )
-          _zsh_autocompllama_rules_test_summary "${tl[@]}"; tests=$REPLY
-          lines=( "${_ZAL_B}${name}${_ZAL_R}  ${_ZAL_D}${states[idx]%%:*} · ${types[idx]:-?} · t rerun tests · any key back${_ZAL_R}" "" )
-          [[ ${states[idx]} == *:* ]] && { _zal_fit "${states[idx]#*: }" $(( w - 2 )); lines+=( "  ${_ZAL_Y}${REPLY}${_ZAL_R}" ); }
-          [[ -n ${instructions[idx]} ]] && { _zal_fit "Instruction  ${instructions[idx]}" $(( w - 2 )); lines+=( "  $REPLY" ); }
-          _zal_fit "Rule         ${summaries[idx]:-?}" $(( w - 2 )); lines+=( "  $REPLY" )
-          _zal_fit "File         ${dir/#$HOME/~}/$name.json" $(( w - 2 )); lines+=( "  $REPLY" )
-          hint=; [[ $tests != "no tests" ]] && hint=" (slowest; budget ${ZSH_AUTOCOMPLLAMA_RULE_BUDGET_US}µs)"
-          lines+=( "  Tests        ${tests}${hint}" )
-          for line in "${(@)tl[1,window]}"; do
-            _zsh_autocompllama_rules_test_line "$line"
-            _zal_fit "$REPLY" $(( w - 4 )); line=$REPLY
-            # Colour after fitting, so the escapes are not counted or cut.
-            case $line in
-              ✓*) line="${_ZAL_G}✓${_ZAL_R}${line#✓}" ;;
-              ✗*) line="${_ZAL_Y}✗${_ZAL_R}${line#✗}" ;;
-            esac
-            lines+=( "    $line" )
-          done
-          (( $#tl > window )) && lines+=( "    ${_ZAL_D}… and $(( $#tl - window )) more: zsh-autocompllama rules test $name${_ZAL_R}" )
-          _zal_frame "${lines[@]}"
-          _zal_key
-          [[ $REPLY == char:t ]] || break
-          results[$name]=$(_zsh_autocompllama_rules_test "$name")
-        done ;;
-    esac
-  done
-  _zal_end "${_ZAL_D}Rules live in ${dir/#$HOME/~}.${_ZAL_R}"
-  } always {
-    _zal_restore
-    # The test runs above loaded rules in subshells only; make sure this
-    # shell has what is on disk now.
-    _zsh_autocompllama_rules_load
-  }
 }

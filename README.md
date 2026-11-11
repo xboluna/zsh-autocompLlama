@@ -69,6 +69,15 @@ zsh-autocompllama rules add hint 'prefer rg over grep'  # a nudge for the model
 zsh-autocompllama rules                                 # browse, toggle, test
 ```
 
+Or let a model write it. With a suggestion on screen, press **Ctrl+O** and say
+what should happen instead ("vim should always use nvim, not vim"). A larger
+local model (`qwen2.5-coder:7b` by default; pull it once, or pick another in
+`configure`) writes the rule and its tests in the background, and the rule
+goes live once it passes them. `zsh-autocompllama rules` shows builds as they
+run and lets you stop one, run it again, or rebuild a rule you are not happy
+with, saying what was wrong. The model has no tools and nothing it writes is
+executed: its answer is read as data and checked like any other rule.
+
 Rules are applied to every suggestion, and to what you typed when there is
 nothing else to suggest: with the first rule, typing `vim notes.txt` offers
 `nvim notes.txt`. Each rule is a small JSON file in

@@ -132,9 +132,31 @@ _zsh_autocompllama_config_load
 # longer than BUDGET_US microseconds: rules run on every suggestion.
 (( ! ${+ZSH_AUTOCOMPLLAMA_RULES_DIR} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULES_DIR=${ZSH_AUTOCOMPLLAMA_CONFIG:h}/rules
 (( ! ${+ZSH_AUTOCOMPLLAMA_RULE_BUDGET_US} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_BUDGET_US=1000
+# A rule can be written for you. RULE_KEY (a bindkey sequence; empty for no
+# binding) at the prompt captures what you typed and the suggestion on
+# screen, asks what should happen instead, and hands that to RULE_MODEL,
+# which writes the rule and its tests in the background (see jobs.zsh); the
+# rule goes live once it passes them. That takes judgement, so the model
+# is a larger one than the completion model; it is loaded only while a rule
+# is being written and released RULE_KEEP_ALIVE after. The model gets up to
+# RULE_ROUNDS attempts, each told what was wrong with the last.
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_KEY} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_KEY='^O'
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_MODEL} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_MODEL='qwen2.5-coder:7b'
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_ROUNDS} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_ROUNDS=4
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_KEEP_ALIVE} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_KEEP_ALIVE='1m'
+# When a suggestion has been on screen for RULE_HINT_DELAY seconds without
+# being taken, say that RULE_KEY writes a rule about it: at most RULE_HINT
+# times per shell, 0 for never.
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_HINT} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_HINT=3
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_HINT_DELAY} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_HINT_DELAY=2
+# Where rule builds keep their state and logs. Machine state, not
+# configuration: it does not need to travel.
+(( ! ${+ZSH_AUTOCOMPLLAMA_JOBS_DIR} )) && typeset -g ZSH_AUTOCOMPLLAMA_JOBS_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/zsh-autocompllama/jobs
 
 typeset -g _ZSH_AUTOCOMPLLAMA_OS=$(uname -s)
 source "${${(%):-%x}:A:h}/rules.zsh"
+source "${${(%):-%x}:A:h}/jobs.zsh"
+source "${${(%):-%x}:A:h}/rules-tui.zsh"
 _zsh_autocompllama_rules_load
 
 # ---------------------------------------------------------------------------
@@ -1739,7 +1761,122 @@ _zsh_autocompllama_cancel() {
     _ZSH_AUTOCOMPLLAMA_PID=
   fi
   _ZSH_AUTOCOMPLLAMA_PENDING=
+  _zsh_autocompllama_hint_cancel
   _zsh_autocompllama_spinner_hide "$1"
+}
+
+# ---------------------------------------------------------------------------
+# Writing a rule from the prompt
+# ---------------------------------------------------------------------------
+
+typeset -gi _ZSH_AUTOCOMPLLAMA_CAPTURING=0 _ZSH_AUTOCOMPLLAMA_HINTS_SHOWN=0
+typeset -g _ZSH_AUTOCOMPLLAMA_HINT_FD _ZSH_AUTOCOMPLLAMA_HINT_PID
+# Builds started from this shell that have not been reported on yet.
+typeset -ga _ZSH_AUTOCOMPLLAMA_JOBS_WATCH
+
+# Widget bound to RULE_KEY: capture the typed text and the suggestion on
+# screen, ask for an instruction below them, and start a build with all
+# three. The line being edited is left exactly as it was.
+_zsh_autocompllama_rule_capture() {
+  setopt localoptions extendedglob
+  local typed=$BUFFER suggested=
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT && $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
+    suggested=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT
+  elif [[ -n $POSTDISPLAY ]]; then
+    suggested=$BUFFER$POSTDISPLAY
+  fi
+  if [[ -z $typed && -z $suggested ]]; then
+    zle -M "zsh-autocompllama: type a command first, then ${ZSH_AUTOCOMPLLAMA_RULE_KEY/#\^/ctrl+} writes a rule about it"
+    return 0
+  fi
+  _zsh_autocompllama_cancel
+
+  # The instruction is typed in a nested edit under the line as it stands
+  # (so what is being captured stays in view). While it lasts, what is
+  # typed is not a command: no suggestions for it, ours or history's.
+  local REPLY= instruction post=$POSTDISPLAY
+  local -i rc cursor=$CURSOR had_disabled=${+_ZSH_AUTOSUGGEST_DISABLED}
+  local -a highlight; highlight=( "${region_highlight[@]}" )
+  _ZSH_AUTOCOMPLLAMA_CAPTURING=1
+  (( had_disabled )) || typeset -g _ZSH_AUTOSUGGEST_DISABLED=
+  {
+    read-from-minibuffer "Rule about the line above: what should happen instead? (⏎ start · ctrl-g cancel)
+› "
+    rc=$?
+  } always {
+    _ZSH_AUTOCOMPLLAMA_CAPTURING=0
+    (( had_disabled )) || unset _ZSH_AUTOSUGGEST_DISABLED
+    # read-from-minibuffer restores the line itself, but not reliably when
+    # its nested edit runs through other plugins' widget wrappers.
+    BUFFER=$typed; CURSOR=$cursor; POSTDISPLAY=$post
+    region_highlight=( "${highlight[@]}" )
+  }
+  instruction=${${REPLY##[[:space:]]#}%%[[:space:]]#}
+  if (( rc )) || [[ -z $instruction ]]; then
+    zle -M "zsh-autocompllama: no rule written"
+    return 0
+  fi
+  if _zsh_autocompllama_job_new "$instruction" "$typed" "$suggested"; then
+    _ZSH_AUTOCOMPLLAMA_JOBS_WATCH+=( $REPLY )
+    zle -M "zsh-autocompllama: $ZSH_AUTOCOMPLLAMA_RULE_MODEL is writing that rule in the background ('zsh-autocompllama rules' shows it)"
+  else
+    zle -M "zsh-autocompllama: could not start a rule build in $ZSH_AUTOCOMPLLAMA_JOBS_DIR"
+  fi
+}
+
+# Once a suggestion has sat there untaken for a moment, mention the rule
+# key. A timer in a child, like the spinner's; any change to the line
+# cancels it.
+_zsh_autocompllama_hint_schedule() {
+  [[ -n $ZSH_AUTOCOMPLLAMA_RULE_KEY ]] || return 0
+  (( _ZSH_AUTOCOMPLLAMA_HINTS_SHOWN < ZSH_AUTOCOMPLLAMA_RULE_HINT )) || return 0
+  _zsh_autocompllama_hint_cancel
+  exec {_ZSH_AUTOCOMPLLAMA_HINT_FD}< <(
+    print -r -- $sysparams[pid]
+    sleep $ZSH_AUTOCOMPLLAMA_RULE_HINT_DELAY && print -r -- HINT
+  )
+  read -r -u $_ZSH_AUTOCOMPLLAMA_HINT_FD _ZSH_AUTOCOMPLLAMA_HINT_PID
+  zle -F -w $_ZSH_AUTOCOMPLLAMA_HINT_FD _zsh_autocompllama_on_hint
+}
+_zsh_autocompllama_hint_cancel() {
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_HINT_FD ]]; then
+    zle -F $_ZSH_AUTOCOMPLLAMA_HINT_FD 2>/dev/null
+    exec {_ZSH_AUTOCOMPLLAMA_HINT_FD}<&-
+    _ZSH_AUTOCOMPLLAMA_HINT_FD=
+  fi
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_HINT_PID ]]; then
+    _zsh_autocompllama_kill_tree $_ZSH_AUTOCOMPLLAMA_HINT_PID
+    _ZSH_AUTOCOMPLLAMA_HINT_PID=
+  fi
+}
+# zle -F handler (a widget): the timer ran out with the suggestion still up.
+_zsh_autocompllama_on_hint() {
+  local fd=$1 line
+  read -r -u $fd line
+  _zsh_autocompllama_hint_cancel
+  [[ $line == HINT ]] || return 0
+  (( _ZSH_AUTOCOMPLLAMA_HINTS_SHOWN++ ))
+  zle -M "${ZSH_AUTOCOMPLLAMA_RULE_KEY/#\^/ctrl+} to write a rule about this suggestion"
+}
+
+# At a new prompt: say how the builds started from this shell ended.
+_zsh_autocompllama_jobs_notify() {
+  (( $#_ZSH_AUTOCOMPLLAMA_JOBS_WATCH )) || return 0
+  local id msg row t=$'\t'
+  local -a still f
+  for id in "${_ZSH_AUTOCOMPLLAMA_JOBS_WATCH[@]}"; do
+    _zsh_autocompllama_job_status $id || continue
+    case $REPLY in
+      queued|building) still+=( $id ) ;;
+      done)
+        row=${${(M)_ZSH_AUTOCOMPLLAMA_RULE_LIST:#$reply[1]$t*}[1]}
+        f=( "${(@ps:\t:)row}" )
+        msg="new rule $reply[1]${f[4]:+: $f[4]}" ;;
+      failed) msg="the rule build failed: $reply[1] ('zsh-autocompllama rules' to see it or run it again)" ;;
+    esac
+  done
+  _ZSH_AUTOCOMPLLAMA_JOBS_WATCH=( "${still[@]}" )
+  [[ -n $msg ]] && zle -M "zsh-autocompllama: $msg"
 }
 
 # Start a background suggestion for <partial> after the debounce period. The
@@ -1827,7 +1964,8 @@ _zsh_autocompllama_on_result() {
         zle -R
       else
         _zsh_autocompllama_replacement_show "$suggestion"
-      fi ;;
+      fi
+      _zsh_autocompllama_hint_schedule ;;
     ERR\ *)
       _ZSH_AUTOCOMPLLAMA_BACKOFF_UNTIL=$(( EPOCHSECONDS + ZSH_AUTOCOMPLLAMA_BACKOFF ))
       zle -M "${line#ERR } (suggestions paused for ${ZSH_AUTOCOMPLLAMA_BACKOFF}s)" ;;
@@ -1837,6 +1975,8 @@ _zsh_autocompllama_on_result() {
 # zle-line-pre-redraw hook: schedule a suggestion when the line changed.
 _zsh_autocompllama_on_change() {
   (( $+widgets[autosuggest-suggest] )) || return 0
+  # An instruction for a rule is being typed, not a command.
+  (( _ZSH_AUTOCOMPLLAMA_CAPTURING )) && return 0
   if [[ $BUFFER == $_ZSH_AUTOCOMPLLAMA_LAST_BUFFER ]]; then
     # Cursor movement and the like. The rewrite line must stay exactly what
     # the accept key would insert: if something emptied POSTDISPLAY under it
@@ -1872,6 +2012,7 @@ _zsh_autocompllama_on_change() {
 _zsh_autocompllama_on_line_init() {
   _ZSH_AUTOCOMPLLAMA_LAST_BUFFER=
   _zsh_autocompllama_rules_refresh
+  _zsh_autocompllama_jobs_notify
   if (( ! $+widgets[autosuggest-suggest] && ! _ZSH_AUTOCOMPLLAMA_WARNED )); then
     _ZSH_AUTOCOMPLLAMA_WARNED=1
     zle -M "zsh-autocompllama: zsh-autosuggestions is not loaded, so there will be no suggestions."
@@ -1895,6 +2036,13 @@ add-zsh-hook chpwd _zsh_autocompllama_cards_refresh
 zle -N _zsh_autocompllama_on_result
 zle -N _zsh_autocompllama_on_tick
 zle -N _zsh_autocompllama_accept
+zle -N _zsh_autocompllama_on_hint
+zle -N _zsh_autocompllama_rule_capture
+autoload -Uz read-from-minibuffer
+if [[ -n $ZSH_AUTOCOMPLLAMA_RULE_KEY ]]; then
+  bindkey -M emacs -- "$ZSH_AUTOCOMPLLAMA_RULE_KEY" _zsh_autocompllama_rule_capture
+  bindkey -M viins -- "$ZSH_AUTOCOMPLLAMA_RULE_KEY" _zsh_autocompllama_rule_capture
+fi
 # Take over the accept keys in the insert keymaps, remembering what each did
 # so the widget can fall through to it.
 typeset -gA _ZSH_AUTOCOMPLLAMA_ACCEPT_ORIG
