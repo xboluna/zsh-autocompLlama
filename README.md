@@ -51,10 +51,30 @@ The service ships with a few commands to verify and configure your installation.
 zsh-autocompllama              status, and whether an update is available
 zsh-autocompllama update       pull the latest main into the plugin checkout
 zsh-autocompllama configure    choose settings with the arrow keys
+zsh-autocompllama rules        your own corrections to the suggestions
 zsh-autocompllama check        verify the installation (tools, server, model)
 ```
 
 It's highly configurable! There are over 30 knobs to tweak, from the model to the spinner.
+
+## Rules
+
+When the suggestions keep getting something wrong for you, write a rule:
+
+```sh
+zsh-autocompllama rules add command vim nvim            # vim is always nvim
+zsh-autocompllama rules add argument master main git    # for git, master is main
+zsh-autocompllama rules add block 'git push*--force*'   # never suggest these
+zsh-autocompllama rules add hint 'prefer rg over grep'  # a nudge for the model
+zsh-autocompllama rules                                 # browse, toggle, test
+```
+
+Rules are applied to every suggestion, and to what you typed when there is
+nothing else to suggest: with the first rule, typing `vim notes.txt` offers
+`nvim notes.txt`. Each rule is a small JSON file in
+`~/.config/zsh-autocompllama/rules/`, so rules travel with your dotfiles, and
+each carries tests (a command line and what it must become) that
+`zsh-autocompllama rules test` checks for correctness and speed.
 
 ## Acknowledgements
 

@@ -126,7 +126,16 @@ _zsh_autocompllama_config_load
 (( ! ${+ZSH_AUTOCOMPLLAMA_NUM_CTX} )) && typeset -g ZSH_AUTOCOMPLLAMA_NUM_CTX=4096
 (( ! ${+ZSH_AUTOCOMPLLAMA_NUM_PREDICT} )) && typeset -g ZSH_AUTOCOMPLLAMA_NUM_PREDICT=64
 
+# Rules: your own corrections to the suggestions (see rules.zsh), one JSON
+# file each in this directory; manage them with 'zsh-autocompllama rules'.
+# A rule's test fails as SLOW when applying the rules to its input takes
+# longer than BUDGET_US microseconds: rules run on every suggestion.
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULES_DIR} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULES_DIR=${ZSH_AUTOCOMPLLAMA_CONFIG:h}/rules
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_BUDGET_US} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_BUDGET_US=1000
+
 typeset -g _ZSH_AUTOCOMPLLAMA_OS=$(uname -s)
+source "${${(%):-%x}:A:h}/rules.zsh"
+_zsh_autocompllama_rules_load
 
 # ---------------------------------------------------------------------------
 # Diagnostics
@@ -420,8 +429,19 @@ _zsh_autocompllama_near_candidates() {
 # answers, i.e. the best history candidate. Enable it with
 #   ZSH_AUTOSUGGEST_STRATEGY=(autocompllama)
 _zsh_autosuggest_strategy_autocompllama() {
-  typeset -g suggestion
-  suggestion=$(_zsh_autocompllama_candidates "$1" 1)
+  typeset -g suggestion=
+  if (( ! _ZSH_AUTOCOMPLLAMA_RULES_N )); then
+    suggestion=$(_zsh_autocompllama_candidates "$1" 1)
+    return
+  fi
+  # With rules, the best candidate that survives them and, rewritten, still
+  # continues the typed text (grey text cannot show anything else; a
+  # rewrite of the typed text itself is left to the model's turn).
+  local c
+  for c in ${(f)"$(_zsh_autocompllama_candidates "$1" 5)"}; do
+    _zsh_autocompllama_rules_apply "$c"
+    if [[ $REPLY == "$1"?* ]]; then suggestion=$REPLY; return; fi
+  done
 }
 
 # ---------------------------------------------------------------------------
@@ -588,6 +608,9 @@ _zsh_autocompllama_context() {
 
   print -r -- "OS: $_ZSH_AUTOCOMPLLAMA_OS"
   _zsh_autocompllama_cards ""
+  # Hint rules: stable between calls, so they belong to the cached prefix.
+  (( $#_ZSH_AUTOCOMPLLAMA_RULE_HINTS )) &&
+    print -r -- "User preferences: ${(j:; :)_ZSH_AUTOCOMPLLAMA_RULE_HINTS}"
   print -r -- "Directory: $PWD${branch:+ (git branch: $branch)}"
 
   if (( ZSH_AUTOCOMPLLAMA_MAX_FILES > 0 )); then
@@ -612,7 +635,7 @@ _zsh_autocompllama_context() {
 # request has a different shape and cannot share it.)
 _zsh_autocompllama_system() {
   print -r -- "Context about the user's machine, project and shell session. The command \
-'zsh-autocompllama' (subcommands: update, configure, check) manages this completion plugin."
+'zsh-autocompllama' (subcommands: update, configure, rules, check) manages this completion plugin."
   _zsh_autocompllama_context
 }
 
@@ -1176,14 +1199,58 @@ _zsh_autocompllama_fresh() {
   _zsh_autocompllama_emit "$continuation" "${reply[@]}"
 }
 
-# Compute a suggestion for a partial command and print it. Today the result
-# always starts with the partial command (the candidate query and the
-# fill-in-the-middle request both guarantee it); the line editor also
-# handles one that does not, by showing it as a rewrite. Pure with respect
-# to the line editor so it
-# can run outside ZLE (tests, background jobs). Returns 1 on errors and 2 when
-# there is simply nothing to suggest; both print a reason to stderr.
+# Compute a suggestion for a partial command and print it, after the user's
+# rules have had their say: a suggestion is rewritten or blocked by them,
+# and when nothing (else) is left to suggest, what the rules make of the
+# typed text itself is the suggestion ('vim notes.txt' typed in full, under
+# a rule that vim is nvim, suggests 'nvim notes.txt'). Same output and
+# returns as _zsh_autocompllama_suggest.
 _zsh_autocompllama_complete() {
+  setopt localoptions extendedglob
+  local partial=$1
+  if (( ! _ZSH_AUTOCOMPLLAMA_RULES_N )); then
+    _zsh_autocompllama_suggest "$partial"
+    return
+  fi
+  local out trimmed=${partial%%[[:space:]]#}
+  local -i rc
+  out=$(_zsh_autocompllama_suggest "$partial" 2>&1); rc=$?
+  if (( rc == 1 )); then
+    print -u2 -r -- "$out"
+    return 1
+  fi
+  if (( rc == 0 )); then
+    local -a lines; lines=( ${(f)out} )
+    _zsh_autocompllama_rules_apply "${lines[-1]}"
+    case $? in
+      0) print -r -- "$out"; return 0 ;;
+      1) if [[ $REPLY != $trimmed ]]; then
+           print -rl -- ${(M)lines[1,-2]:#UNVERIFIED *} "$REPLY"
+           return 0
+         fi
+         out="zsh-autocompllama: the rule ${(j:, :)reply} turns the suggestion into what was typed" ;;
+      2) out="zsh-autocompllama: suggestion blocked by the rule ${(j:, :)reply}: ${lines[-1]}" ;;
+    esac
+  fi
+  if [[ -n $trimmed ]]; then
+    _zsh_autocompllama_rules_apply "$trimmed"
+    if (( $? == 1 )); then
+      print -r -- "$REPLY"
+      return 0
+    fi
+  fi
+  print -u2 -r -- "$out"
+  return 2
+}
+
+# The suggestion for a partial command, before rules: printed on the last
+# line, after one 'UNVERIFIED <word>' line per word of it that could not be
+# checked. It either continues the partial command or, for a near miss or a
+# translated description, replaces it; the line editor shows the latter as
+# a rewrite. Pure with respect to the line editor so it can run outside ZLE
+# (tests, background jobs). Returns 1 on errors and 2 when there is simply
+# nothing to suggest; both print a reason to stderr.
+_zsh_autocompllama_suggest() {
   setopt localoptions extendedglob
   local partial=$1
   local completion
@@ -1804,6 +1871,7 @@ _zsh_autocompllama_on_change() {
 
 _zsh_autocompllama_on_line_init() {
   _ZSH_AUTOCOMPLLAMA_LAST_BUFFER=
+  _zsh_autocompllama_rules_refresh
   if (( ! $+widgets[autosuggest-suggest] && ! _ZSH_AUTOCOMPLLAMA_WARNED )); then
     _ZSH_AUTOCOMPLLAMA_WARNED=1
     zle -M "zsh-autocompllama: zsh-autosuggestions is not loaded, so there will be no suggestions."

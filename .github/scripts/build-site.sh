@@ -50,7 +50,7 @@ mkdir -p "$out"
   echo
   echo "---"
   echo
-  echo "# cli.zsh (the zsh-autocompllama command: update, configure, check)"
+  echo "# cli.zsh (the zsh-autocompllama command: update, configure, rules, check)"
   echo
   echo '```zsh'
   cat "$root/cli.zsh"
@@ -62,6 +62,14 @@ mkdir -p "$out"
   echo
   echo '```zsh'
   cat "$root/tui.zsh"
+  echo '```'
+  echo
+  echo "---"
+  echo
+  echo "# rules.zsh (user rules that rewrite or block suggestions, and the rules command)"
+  echo
+  echo '```zsh'
+  cat "$root/rules.zsh"
   echo '```'
 } > "$out/llms-full.txt"
 
