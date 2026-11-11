@@ -40,7 +40,7 @@ _ZSH_AUTOCOMPLLAMA_SETTINGS=(
   "ZSH_AUTOCOMPLLAMA_NUM_CTX|int|4096|Model context window"
   "ZSH_AUTOCOMPLLAMA_RULE_MODEL|choice:_zsh_autocompllama_rule_model_choices|qwen2.5-coder:7b|Model that writes rules (ctrl+O at the prompt)"
   "ZSH_AUTOCOMPLLAMA_RULE_ROUNDS|int|4|Attempts that model gets at a rule"
-  "ZSH_AUTOCOMPLLAMA_RULE_HINT|int|3|Mentions of the rule key under a suggestion, per shell (0 = never)"
+  "ZSH_AUTOCOMPLLAMA_RULE_HINT|int|3|Mentions of the rule key beside a suggestion, per shell (0 = never)"
 )
 
 _zsh_autocompllama_fresh_choices() {

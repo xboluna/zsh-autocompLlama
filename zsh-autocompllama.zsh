@@ -146,9 +146,12 @@ _zsh_autocompllama_config_load
 (( ! ${+ZSH_AUTOCOMPLLAMA_RULE_KEEP_ALIVE} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_KEEP_ALIVE='1m'
 # When a suggestion has been on screen for RULE_HINT_DELAY seconds without
 # being taken, say that RULE_KEY writes a rule about it: at most RULE_HINT
-# times per shell, 0 for never.
+# times per shell, 0 for never. It is a line under the suggestion in
+# RULE_HINT_COLOR (empty uses the grey of zsh-autosuggestions' text), and
+# goes away with the next key.
 (( ! ${+ZSH_AUTOCOMPLLAMA_RULE_HINT} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_HINT=3
 (( ! ${+ZSH_AUTOCOMPLLAMA_RULE_HINT_DELAY} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_HINT_DELAY=2
+(( ! ${+ZSH_AUTOCOMPLLAMA_RULE_HINT_COLOR} )) && typeset -g ZSH_AUTOCOMPLLAMA_RULE_HINT_COLOR=
 # Where rule builds keep their state and logs. Machine state, not
 # configuration: it does not need to travel.
 (( ! ${+ZSH_AUTOCOMPLLAMA_JOBS_DIR} )) && typeset -g ZSH_AUTOCOMPLLAMA_JOBS_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/zsh-autocompllama/jobs
@@ -1738,6 +1741,7 @@ _zsh_autocompllama_replacement_clear() {
 # if it is what is on screen right now. Otherwise do whatever the key did
 # before (for the right arrow, move or accept grey text).
 _zsh_autocompllama_accept() {
+  _zsh_autocompllama_hint_strip
   if [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT &&
         $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
     BUFFER=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT
@@ -1762,6 +1766,7 @@ _zsh_autocompllama_cancel() {
   fi
   _ZSH_AUTOCOMPLLAMA_PENDING=
   _zsh_autocompllama_hint_cancel
+  _zsh_autocompllama_hint_strip
   _zsh_autocompllama_spinner_hide "$1"
 }
 
@@ -1770,7 +1775,8 @@ _zsh_autocompllama_cancel() {
 # ---------------------------------------------------------------------------
 
 typeset -gi _ZSH_AUTOCOMPLLAMA_CAPTURING=0 _ZSH_AUTOCOMPLLAMA_HINTS_SHOWN=0
-typeset -g _ZSH_AUTOCOMPLLAMA_HINT_FD _ZSH_AUTOCOMPLLAMA_HINT_PID
+typeset -g _ZSH_AUTOCOMPLLAMA_HINT_FD _ZSH_AUTOCOMPLLAMA_HINT_PID _ZSH_AUTOCOMPLLAMA_HINT_TEXT
+typeset -gi _ZSH_AUTOCOMPLLAMA_HINT_FRESH=0
 # Builds started from this shell that have not been reported on yet.
 typeset -ga _ZSH_AUTOCOMPLLAMA_JOBS_WATCH
 
@@ -1779,6 +1785,7 @@ typeset -ga _ZSH_AUTOCOMPLLAMA_JOBS_WATCH
 # three. The line being edited is left exactly as it was.
 _zsh_autocompllama_rule_capture() {
   setopt localoptions extendedglob
+  _zsh_autocompllama_hint_strip
   local typed=$BUFFER suggested=
   if [[ -n $_ZSH_AUTOCOMPLLAMA_REPLACEMENT && $POSTDISPLAY == "$_ZSH_AUTOCOMPLLAMA_REPLACEMENT_TEXT" ]]; then
     suggested=$_ZSH_AUTOCOMPLLAMA_REPLACEMENT
@@ -1791,27 +1798,55 @@ _zsh_autocompllama_rule_capture() {
   fi
   _zsh_autocompllama_cancel
 
-  # The instruction is typed in a nested edit under the line as it stands
-  # (so what is being captured stays in view). While it lasts, what is
-  # typed is not a command: no suggestions for it, ours or history's.
-  local REPLY= instruction post=$POSTDISPLAY
-  local -i rc cursor=$CURSOR had_disabled=${+_ZSH_AUTOSUGGEST_DISABLED}
-  local -a highlight; highlight=( "${region_highlight[@]}" )
+  # The instruction is typed in a nested edit under the line as it stands,
+  # which stays in view, colours and all, as display text before the edit.
+  # While it lasts, what is typed is not a command: no suggestions for it,
+  # ours or history's, and no syntax highlighting (zsh-syntax-highlighting
+  # leaves alone a line longer than its MAXLENGTH). ctrl-g, or the rule key
+  # again, cancels.
+  local instruction post=$POSTDISPLAY pre=$PREDISPLAY h REPLY
+  local -i rc cursor=$CURSOR
+  local -i had_disabled=${+_ZSH_AUTOSUGGEST_DISABLED} had_max=${+ZSH_HIGHLIGHT_MAXLENGTH}
+  local max=$ZSH_HIGHLIGHT_MAXLENGTH
+  local -a highlight shown f
+  highlight=( "${region_highlight[@]}" )
+  for h in "${highlight[@]}"; do
+    f=( ${=h} )
+    [[ $f[1] == <-> && $f[2] == <-> ]] || continue
+    # Without its memo, or the plugin it came from would take it back.
+    shown+=( "P$(( f[1] + $#pre )) $(( f[2] + $#pre )) $f[3]" )
+  done
+  local line="${pre}${typed}${post}"$'\n'
+  local ask="What should happen instead? (⏎ writes a rule · ctrl-g cancels)"$'\n'
+  _zsh_autocompllama_hint_color
+  shown+=( "P$#line $(( $#line + $#ask )) fg=$REPLY"
+    "P$(( $#line + $#ask )) $(( $#line + $#ask + 1 )) fg=$ZSH_AUTOCOMPLLAMA_SPINNER_COLOR" )
+  bindkey -N _zsh_autocompllama_capture main
+  bindkey -M _zsh_autocompllama_capture '^G' _zsh_autocompllama_capture_abort
+  bindkey -M _zsh_autocompllama_capture -- "$ZSH_AUTOCOMPLLAMA_RULE_KEY" _zsh_autocompllama_capture_abort
   _ZSH_AUTOCOMPLLAMA_CAPTURING=1
   (( had_disabled )) || typeset -g _ZSH_AUTOSUGGEST_DISABLED=
+  typeset -g ZSH_HIGHLIGHT_MAXLENGTH=0
   {
-    read-from-minibuffer "Rule about the line above: what should happen instead? (⏎ start · ctrl-g cancel)
-› "
-    rc=$?
+    PREDISPLAY="${line}${ask}› " BUFFER= POSTDISPLAY=
+    region_highlight=( "${shown[@]}" )
+    # The builtin, not the wrappers other plugins put around it.
+    zle .recursive-edit -K _zsh_autocompllama_capture; rc=$?
+    instruction=$BUFFER
   } always {
+    (( _ZSH_AUTOCOMPLLAMA_CAPTURING == 2 )) && rc=1
     _ZSH_AUTOCOMPLLAMA_CAPTURING=0
     (( had_disabled )) || unset _ZSH_AUTOSUGGEST_DISABLED
-    # read-from-minibuffer restores the line itself, but not reliably when
-    # its nested edit runs through other plugins' widget wrappers.
-    BUFFER=$typed; CURSOR=$cursor; POSTDISPLAY=$post
+    if (( had_max )); then ZSH_HIGHLIGHT_MAXLENGTH=$max; else unset ZSH_HIGHLIGHT_MAXLENGTH; fi
+    # Put the line back. The instruction is in its undo history now, where
+    # an undo would bring it back as a command: undo stops here for the
+    # rest of this line.
+    PREDISPLAY=$pre BUFFER=$typed CURSOR=$cursor POSTDISPLAY=$post
     region_highlight=( "${highlight[@]}" )
+    zle split-undo
+    UNDO_LIMIT_NO=$UNDO_CHANGE_NO
   }
-  instruction=${${REPLY##[[:space:]]#}%%[[:space:]]#}
+  instruction=${${instruction##[[:space:]]#}%%[[:space:]]#}
   if (( rc )) || [[ -z $instruction ]]; then
     zle -M "zsh-autocompllama: no rule written"
     return 0
@@ -1824,9 +1859,26 @@ _zsh_autocompllama_rule_capture() {
   fi
 }
 
+# Bound to ctrl-g and the rule key while an instruction is being typed:
+# leave the nested edit, marking it as given up.
+_zsh_autocompllama_capture_abort() {
+  _ZSH_AUTOCOMPLLAMA_CAPTURING=2
+  zle .accept-line
+}
+
+# The colour of quiet text (the mention of the rule key, the question under
+# a captured line), in REPLY: RULE_HINT_COLOR, or the grey of
+# zsh-autosuggestions' text.
+_zsh_autocompllama_hint_color() {
+  REPLY=$ZSH_AUTOCOMPLLAMA_RULE_HINT_COLOR
+  [[ -n $REPLY ]] && return 0
+  local -a fg; fg=( ${(M)${(s:,:)ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE}:#fg=*} )
+  REPLY=${${fg[1]#fg=}:-8}
+}
+
 # Once a suggestion has sat there untaken for a moment, mention the rule
-# key. A timer in a child, like the spinner's; any change to the line
-# cancels it.
+# key, quietly: a grey line under it. A timer in a child, like the
+# spinner's; any change to the line cancels it.
 _zsh_autocompllama_hint_schedule() {
   [[ -n $ZSH_AUTOCOMPLLAMA_RULE_KEY ]] || return 0
   (( _ZSH_AUTOCOMPLLAMA_HINTS_SHOWN < ZSH_AUTOCOMPLLAMA_RULE_HINT )) || return 0
@@ -1850,13 +1902,43 @@ _zsh_autocompllama_hint_cancel() {
   fi
 }
 # zle -F handler (a widget): the timer ran out with the suggestion still up.
+# The mention is a line of its own after the suggestion, in the display
+# text that follows the buffer (a message under the line cannot be
+# coloured). That text is also what zsh-autosuggestions inserts when a
+# suggestion is accepted, so the mention is taken out again before anything
+# else looks at the line: see _zsh_autocompllama_hint_strip.
 _zsh_autocompllama_on_hint() {
   local fd=$1 line
   read -r -u $fd line
   _zsh_autocompllama_hint_cancel
-  [[ $line == HINT ]] || return 0
+  [[ $line == HINT && -n $POSTDISPLAY && -z $_ZSH_AUTOCOMPLLAMA_HINT_TEXT ]] || return 0
   (( _ZSH_AUTOCOMPLLAMA_HINTS_SHOWN++ ))
-  zle -M "${ZSH_AUTOCOMPLLAMA_RULE_KEY/#\^/ctrl+} to write a rule about this suggestion"
+  _zsh_autocompllama_prompt_width
+  local text=$'\n'"${(l:REPLY:)}${ZSH_AUTOCOMPLLAMA_RULE_KEY/#\^/ctrl+}: write a rule about this suggestion"
+  _ZSH_AUTOCOMPLLAMA_HINT_TEXT=$text
+  POSTDISPLAY+=$text
+  _zsh_autocompllama_hint_highlight
+  _ZSH_AUTOCOMPLLAMA_HINT_FRESH=1
+  zle -R
+}
+# Colour the mention. Done again at each redraw while it is up, so that
+# the entry comes after whatever other plugins have (re)built by then.
+_zsh_autocompllama_hint_highlight() {
+  region_highlight=( ${region_highlight:#*memo=zsh-autocompllama-hint} )
+  [[ -n $_ZSH_AUTOCOMPLLAMA_HINT_TEXT && $POSTDISPLAY == *"$_ZSH_AUTOCOMPLLAMA_HINT_TEXT" ]] || return 0
+  local -i end=$(( $#BUFFER + $#POSTDISPLAY ))
+  _zsh_autocompllama_hint_color
+  region_highlight+=( "$(( end - $#_ZSH_AUTOCOMPLLAMA_HINT_TEXT )) $end fg=$REPLY memo=zsh-autocompllama-hint" )
+}
+# Take the mention away: out of the display text, and out of the buffer if
+# accepting a suggestion carried it there.
+_zsh_autocompllama_hint_strip() {
+  [[ -n $_ZSH_AUTOCOMPLLAMA_HINT_TEXT ]] || return 0
+  local text=$_ZSH_AUTOCOMPLLAMA_HINT_TEXT
+  _ZSH_AUTOCOMPLLAMA_HINT_TEXT=
+  [[ $POSTDISPLAY == *"$text" ]] && POSTDISPLAY=${POSTDISPLAY%"$text"}
+  [[ $BUFFER == *"$text" ]] && BUFFER=${BUFFER%"$text"}
+  region_highlight=( ${region_highlight:#*memo=zsh-autocompllama-hint} )
 }
 
 # At a new prompt: say how the builds started from this shell ended.
@@ -1977,6 +2059,17 @@ _zsh_autocompllama_on_change() {
   (( $+widgets[autosuggest-suggest] )) || return 0
   # An instruction for a rule is being typed, not a command.
   (( _ZSH_AUTOCOMPLLAMA_CAPTURING )) && return 0
+  # The mention of the rule key goes with the first key after it appeared
+  # (the redraw that puts it on screen comes through here too).
+  if [[ -n $_ZSH_AUTOCOMPLLAMA_HINT_TEXT ]]; then
+    if (( _ZSH_AUTOCOMPLLAMA_HINT_FRESH )) && [[ $BUFFER == $_ZSH_AUTOCOMPLLAMA_LAST_BUFFER &&
+          $POSTDISPLAY == *"$_ZSH_AUTOCOMPLLAMA_HINT_TEXT" ]]; then
+      _ZSH_AUTOCOMPLLAMA_HINT_FRESH=0
+      _zsh_autocompllama_hint_highlight
+      return 0
+    fi
+    _zsh_autocompllama_hint_strip
+  fi
   if [[ $BUFFER == $_ZSH_AUTOCOMPLLAMA_LAST_BUFFER ]]; then
     # Cursor movement and the like. The rewrite line must stay exactly what
     # the accept key would insert: if something emptied POSTDISPLAY under it
@@ -2025,6 +2118,7 @@ _zsh_autocompllama_on_line_init() {
 }
 
 _zsh_autocompllama_on_line_finish() {
+  _zsh_autocompllama_hint_strip
   _zsh_autocompllama_suggestion_clear
   _zsh_autocompllama_cancel noredraw
 }
@@ -2038,7 +2132,7 @@ zle -N _zsh_autocompllama_on_tick
 zle -N _zsh_autocompllama_accept
 zle -N _zsh_autocompllama_on_hint
 zle -N _zsh_autocompllama_rule_capture
-autoload -Uz read-from-minibuffer
+zle -N _zsh_autocompllama_capture_abort
 if [[ -n $ZSH_AUTOCOMPLLAMA_RULE_KEY ]]; then
   bindkey -M emacs -- "$ZSH_AUTOCOMPLLAMA_RULE_KEY" _zsh_autocompllama_rule_capture
   bindkey -M viins -- "$ZSH_AUTOCOMPLLAMA_RULE_KEY" _zsh_autocompllama_rule_capture
