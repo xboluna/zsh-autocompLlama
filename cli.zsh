@@ -4,6 +4,8 @@
 #   zsh-autocompllama update       pull the latest main into the plugin checkout
 #   zsh-autocompllama configure    choose settings with the arrow keys (saved to a
 #                                  config file the plugin reads on start)
+#   zsh-autocompllama rules        your own corrections to the suggestions: browse,
+#                                  add, test ('rules help' lists the subcommands)
 #   zsh-autocompllama check        verify the installation (tools, server, model)
 #   zsh-autocompllama help
 #
@@ -137,7 +139,7 @@ _zsh_autocompllama_cli_status() {
       print -r -- "  up to date with main"
     fi
   fi
-  print -r -- "  commands: update, configure, check, help"
+  print -r -- "  commands: update, configure, rules, check, help"
 }
 
 _zsh_autocompllama_cli_update() {
@@ -398,9 +400,10 @@ zsh-autocompllama() {
     ""|status) _zsh_autocompllama_cli_status ;;
     update) _zsh_autocompllama_cli_update ;;
     configure|config) shift; _zsh_autocompllama_cli_configure "$@" ;;
+    rules) shift; _zsh_autocompllama_cli_rules "$@" ;;
     check) zsh_autocompllama_check ;;
     help|-h|--help) sed -n '3,/^$/p' "$_ZSH_AUTOCOMPLLAMA_DIR/cli.zsh" | sed 's/^# \{0,1\}//' ;;
-    *) print -u2 -r -- "zsh-autocompllama: unknown command '$1' (update, configure, check, help)"; return 2 ;;
+    *) print -u2 -r -- "zsh-autocompllama: unknown command '$1' (update, configure, rules, check, help)"; return 2 ;;
   esac
 }
 alias zsh-autocompLlama=zsh-autocompllama
