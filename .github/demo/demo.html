@@ -1,0 +1,482 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #0e1016;
+    --fg: #d6dbe5;
+    --dim: #5d6573;
+    --ghost: #646c7a;
+    --cyan: #6cc7d9;
+    --magenta: #c792ea;
+    --green: #8bd17c;
+    --yellow: #f2c86b;
+    --red: #f07178;
+    --blue: #82aaff;
+  }
+  html, body { margin: 0; padding: 0; }
+  body {
+    width: 1280px; height: 800px; overflow: hidden;
+    background: radial-gradient(120% 90% at 20% 0%, #2b2347 0%, #171a2c 45%, #0c0e17 100%);
+    font-family: 'Inter', sans-serif;
+  }
+  #stage { position: absolute; inset: 0; transform-origin: 50% 52%; }
+  .glow {
+    position: absolute; width: 900px; height: 600px; left: 190px; top: 140px;
+    background: radial-gradient(closest-side, rgba(120, 110, 255, 0.22), rgba(120, 110, 255, 0));
+    filter: blur(20px);
+  }
+  #caption {
+    position: absolute; left: 0; right: 0; top: 34px; height: 44px;
+    display: flex; justify-content: center;
+  }
+  .pill {
+    position: absolute; top: 0;
+    padding: 10px 20px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #eef0f6; font-size: 19px; font-weight: 500; letter-spacing: 0.1px;
+    white-space: nowrap;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+  }
+  .pill b { color: #fff; font-weight: 650; }
+  .pill .k { font-family: 'JetBrains Mono', 'JetBrainsMono Nerd Font', monospace; font-size: 17px; color: var(--yellow); }
+  #win {
+    position: absolute; left: 200px; top: 104px; width: 880px; height: 640px;
+    border-radius: 14px; overflow: hidden;
+    background: var(--bg);
+    box-shadow: 0 40px 90px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+  #bar {
+    height: 38px; background: #1a1d27; display: flex; align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05); position: relative;
+  }
+  .dot { width: 13px; height: 13px; border-radius: 50%; margin-left: 9px; }
+  .dot:first-child { margin-left: 16px; }
+  #title {
+    position: absolute; left: 0; right: 0; text-align: center;
+    color: #8b93a3; font-size: 14px; font-weight: 500;
+  }
+  #viewport { position: absolute; top: 38px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  #content {
+    position: absolute; left: 0; right: 0; top: 0; padding: 14px 24px;
+    font-family: 'JetBrains Mono', 'JetBrainsMono Nerd Font', 'DejaVu Sans Mono', monospace;
+    font-size: 18px; line-height: 27px; color: var(--fg);
+    white-space: pre; font-variant-ligatures: none;
+  }
+  .ln { height: 27px; position: relative; }
+  .rp { position: absolute; right: 0; top: 0; text-shadow: 0 0 10px rgba(242, 200, 107, 0.55); }
+  .cursor { background: #e8ecf3; color: #0e1016; border-radius: 1px; }
+  .cursor.off { background: transparent; color: inherit; }
+  .cursor.off.gh-cur { color: var(--ghost); }
+  #viewport::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 0; height: 34px; z-index: 2;
+    background: linear-gradient(#0e1016, rgba(14, 16, 22, 0));
+  }
+  .cy { color: var(--cyan); } .mg { color: var(--magenta); } .gr { color: var(--green); }
+  .ye { color: var(--yellow); } .rd { color: var(--red); } .dm { color: var(--dim); }
+  .bl { color: var(--blue); } .gh { color: var(--ghost); } .bo { font-weight: 700; }
+  #keys { position: absolute; right: 214px; bottom: 26px; height: 60px; }
+  .key {
+    position: absolute; right: 0; bottom: 0;
+    min-width: 54px; height: 48px; padding: 0 14px; box-sizing: border-box;
+    white-space: nowrap;
+    border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(#f4f5f9, #d9dce5); color: #22252e;
+    box-shadow: 0 4px 0 #9aa0ad, 0 10px 24px rgba(0, 0, 0, 0.4);
+    font-family: 'Inter', 'DejaVu Sans', sans-serif; font-size: 22px; font-weight: 650;
+  }
+  .key small { font-size: 13px; font-weight: 600; margin-left: 8px; color: #555b68; }
+  .spark { color: var(--yellow); text-shadow: 0 0 12px rgba(242, 200, 107, 0.9); }
+  #shine {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 45%; opacity: 0; pointer-events: none;
+    background: linear-gradient(90deg, rgba(199, 146, 234, 0), rgba(199, 146, 234, 0.13) 45%,
+      rgba(242, 200, 107, 0.16) 55%, rgba(242, 200, 107, 0));
+  }
+  #fade { position: absolute; inset: 0; background: #0c0e17; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow"></div>
+  <div id="caption"></div>
+  <div id="win">
+    <div id="bar">
+      <div class="dot" style="background:#ff5f57"></div>
+      <div class="dot" style="background:#febc2e"></div>
+      <div class="dot" style="background:#28c840"></div>
+      <div id="title">xavi — zsh — ~/code/website</div>
+    </div>
+    <div id="viewport"><div id="content"></div></div>
+    <div id="shine"></div>
+  </div>
+  <div id="keys"></div>
+</div>
+<div id="fade"></div>
+<script>
+// ---------------------------------------------------------------------------
+// Deterministic director: simulates a zsh session and records snapshots.
+// window.render(t) draws the frame at time t (ms). No wall-clock state.
+// ---------------------------------------------------------------------------
+const FLAT = /[?&]flat\b/.test(location.search);
+const LINE_H = 27;
+const VIEW_H = 640 - 38 - 14;          // usable content height
+const ACTIVE_ROW = 12;                  // keep the input line around here
+const SPINNER = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏';
+
+let seed = 7;
+const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const span = (cls, s) => `<span class="${cls}">${esc(s)}</span>`;
+
+const PROMPT_TOP = `${span('cy bo', '~/code/website')} ${span('dm', 'on')} ${span('mg bo', 'demo-video')}`;
+const PROMPT = span('gr bo', '❯') + ' ';
+
+// Shell history, most recent first. Grey suggestions come from here.
+const history = [
+  'git commit -am "wip"',
+  'git pull',
+  'npm run test',
+  'git status',
+  'git push',
+  'npm run build',
+  'git add -A',
+  'npm run dev',
+  'git pull origin main',
+];
+const historyMatch = (typed) =>
+  typed ? history.find((h) => h.startsWith(typed) && h.length > typed.length) : undefined;
+
+const S = {
+  lines: [
+    '',
+    PROMPT_TOP,
+    PROMPT + 'git pull',
+    'Updating 5c1d9e0..ae50357',
+    'Fast-forward',
+    ` frontend/src/content/bento/projectEntries.ts | 12 ${span('gr', '++++++++')}${span('rd', '----')}`,
+    ' 1 file changed, 8 insertions(+), 4 deletions(-)',
+    '',
+    PROMPT_TOP,
+    PROMPT + 'git commit -am "wip"',
+    '[demo-video 3f2c1a9] wip',
+    ' 3 files changed, 41 insertions(+), 6 deletions(-)',
+    '',
+  ],
+  prompt: true,
+  typed: '',
+  ghost: '',          // grey suffix after the typed text
+  ghostLine: '',      // full grey line (empty-buffer suggestion)
+  spinner: false,
+  rewrite: null,      // { typedHtml, lineHtml }
+  capture: null,      // { text }: an instruction for a rule being typed under the line
+  note: null,         // { state: 'writing' | 'done', t }: the rule being written, then learned
+  caption: '',
+  key: null,          // { label, t }
+  typing: -1e9,       // time of last keystroke (cursor stays solid while typing)
+};
+
+let T = 0;
+const snaps = [];
+let scrollCur = 0, scrollFrom = 0, scrollT0 = 0;
+let captionPrev = '', captionT0 = -1e9;
+
+function activeRow() {
+  return S.lines.length + (S.prompt ? 1 : 0);  // row index of the ❯ line
+}
+function snap() {
+  const target = Math.max(0, activeRow() - ACTIVE_ROW) * LINE_H;
+  if (target !== scrollCur) { scrollFrom = currentScroll(T); scrollT0 = T; scrollCur = target; }
+  if (S.caption !== (snaps.length ? snaps[snaps.length - 1].caption : '')) {
+    captionPrev = snaps.length ? snaps[snaps.length - 1].caption : '';
+    captionT0 = T;
+  }
+  snaps.push({
+    t: T, ...JSON.parse(JSON.stringify(S)),
+    scrollCur, scrollFrom, scrollT0, captionPrev, captionT0,
+  });
+}
+const ease = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : 1 - Math.pow(1 - x, 3));
+function currentScroll(t) {
+  return scrollFrom + (scrollCur - scrollFrom) * ease((t - scrollT0) / 320);
+}
+
+const wait = (ms) => { T += ms; };
+function type(text, cps = 15) {
+  for (const ch of text) {
+    S.typed += ch;
+    const m = historyMatch(S.typed);
+    S.ghost = m ? m.slice(S.typed.length) : '';
+    S.ghostLine = '';
+    S.typing = T;
+    snap();
+    let d = 1000 / cps * (0.6 + rand() * 0.8);
+    if (ch === ' ' && rand() < 0.35) d += 90;
+    wait(d);
+  }
+}
+function key(label) { S.key = { label, t: T }; }
+function typeCapture(text, cps = 18) {
+  for (const ch of text) {
+    S.capture.text += ch;
+    S.typing = T;
+    snap();
+    let d = 1000 / cps * (0.6 + rand() * 0.8);
+    if (ch === ' ' && rand() < 0.35) d += 90;
+    wait(d);
+  }
+}
+function spin(ms) {
+  S.spinner = true; snap();
+  wait(ms);
+  S.spinner = false;
+}
+function accept() {
+  key('→');
+  if (S.rewrite) { S.typed = S.rewrite.plain; S.rewrite = null; }
+  else if (S.ghostLine) { S.typed = S.ghostLine; S.ghostLine = ''; }
+  else { S.typed += S.ghost; }
+  S.ghost = ''; S.typing = T; snap();
+}
+function enter(output = [], gap = 45) {
+  key('⏎');
+  S.lines.push(PROMPT_TOP);
+  S.lines.push(PROMPT + esc(S.typed));
+  S.typed = ''; S.ghost = ''; S.ghostLine = ''; S.prompt = false; S.typing = T;
+  S.capture = null; S.note = null;
+  snap();
+  wait(120);
+  for (const o of output) {
+    if (o === null) { wait(380); continue; }
+    S.lines.push(o); snap(); wait(gap);
+  }
+  S.lines.push('');
+  S.prompt = true; snap();
+}
+function caption(html) { S.caption = html; snap(); }
+
+// ----------------------------- the session ---------------------------------
+snap();
+wait(700);
+
+// 1. English → command
+caption('Say what you want, <b>get a real command</b>');
+wait(500);
+type('undo my last commit but keep the changes', 17);
+wait(320);
+spin(1050);
+S.rewrite = {
+  plain: 'git reset --soft HEAD~1',
+  typedHtml: span('rd', 'undo my last commit but keep the changes'),
+  lineHtml: span('ye', '⇥ ') + span('gr', 'git reset --soft HEAD~1'),
+};
+snap();
+wait(1300);
+accept();
+wait(450);
+enter([]);
+
+// 2. Empty line → likely next command
+wait(250);
+caption('On an empty line, <b>what you’ll likely run next</b>');
+wait(200);
+S.ghostLine = 'git status'; snap();
+wait(1300);
+accept();
+wait(350);
+enter([
+  'On branch demo-video',
+  'Changes to be committed:',
+  '  (use "git restore --staged &lt;file&gt;..." to unstage)',
+  `\t${span('gr', 'modified:   frontend/src/content/bento/projectEntries.ts')}`,
+  `\t${span('gr', 'modified:   frontend/src/components/ProjectsSection.tsx')}`,
+  `\t${span('gr', 'new file:   xboluna/media/demo-videos/zsh-autocompllama.mp4')}`,
+]);
+
+// 3. History suggestion is instant; the local model re-picks for this directory
+wait(500);
+caption('<span class="k">grey</span> history match is instant, then <b>the local model picks</b>');
+wait(350);
+type('npm r', 11);
+wait(420);
+spin(760);
+S.ghost = 'un build'; snap();
+wait(1100);
+accept();
+wait(300);
+enter([
+  '',
+  '&gt; xboluna@1.0.0 build',
+  '&gt; npm run export:blog &amp;&amp; vite build',
+  null,
+  `${span('cy', 'vite v5.4.2')} ${span('gr', 'building for production...')}`,
+  null,
+  `${span('gr', '✓')} 1214 modules transformed.`,
+  `${span('gr', '✓ built in 3.12s')}`,
+], 70);
+
+// 4. Keep typing and the suggestion gets out of the way
+wait(450);
+caption('Keep typing and <b>it gets out of the way</b>');
+wait(250);
+type('git commit -m "Add autocompLlama demo"', 16);
+wait(300);
+enter([
+  '[demo-video 8e4b2d7] Add autocompLlama demo',
+  ' 3 files changed, 52 insertions(+)',
+]);
+
+// 5. Typo → rewrite
+wait(450);
+caption('Typos come back as a <b>rewrite</b>, accepted with <span class="k">→</span>');
+wait(250);
+type('git puhs', 12);
+wait(330);
+spin(720);
+S.rewrite = {
+  plain: 'git push',
+  typedHtml: esc('git pu') + span('rd', 'hs'),
+  lineHtml: span('ye', '⇥ ') + span('gh', 'git pu') + span('ye', 'sh'),
+};
+snap();
+wait(1250);
+accept();
+wait(350);
+enter([
+  'Enumerating objects: 17, done.',
+  'Writing objects: 100% (9/9), 1.18 MiB | 6.40 MiB/s, done.',
+  'To github.com:xboluna/website.git',
+  '   ae50357..8e4b2d7  demo-video -&gt; demo-video',
+], 90);
+
+// 6. A rule, in plain words. (Told once, it holds from then on.)
+wait(450);
+caption('Got it wrong? <span class="k">ctrl+O</span> and <b>tell it once</b>');
+wait(250);
+type('git pull origin m', 13);
+wait(380);
+spin(700);
+snap();
+wait(650);
+key('ctrl+O');
+S.capture = { text: '' }; S.typing = T; snap();
+wait(700);
+typeCapture('remember that in this repo, the main branch is called dev', 19);
+wait(500);
+key('⏎');
+S.capture = null; S.note = { state: 'writing', t: T }; S.typing = T; snap();
+wait(950);
+S.note = { state: 'done', t: T };
+S.ghost = '';
+S.rewrite = {
+  plain: 'git pull origin dev',
+  typedHtml: esc('git pull origin ') + span('rd', 'm'),
+  lineHtml: span('ye', '⇥ ') + span('gh', 'git pull origin ') + span('ye', 'dev'),
+};
+snap();
+wait(1900);
+accept();
+wait(450);
+enter([
+  'From github.com:xboluna/website',
+  ' * branch            dev        -&gt; FETCH_HEAD',
+  'Already up to date.',
+], 90);
+wait(400);
+caption('');
+wait(1500);
+const DURATION = T + 500;
+window.DURATION = DURATION;
+
+// ------------------------------- render ------------------------------------
+const $ = (id) => document.getElementById(id);
+function stateAt(t) {
+  let lo = 0, hi = snaps.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (snaps[mid].t <= t) lo = mid; else hi = mid - 1; }
+  return snaps[lo];
+}
+function captionHtml(text, opacity, dy) {
+  return text ? `<div class="pill" style="opacity:${opacity};transform:translateY(${dy}px)">${text}</div>` : '';
+}
+
+window.render = function (t) {
+  const s = stateAt(t);
+
+  // Terminal lines
+  let html = s.lines.map((l) => `<div class="ln">${l || ' '}</div>`).join('');
+  if (s.prompt) {
+    const blinkOn = t - s.typing < 600 || Math.floor((t - s.typing) / 530) % 2 === 0;
+    // Block cursor sits on the next character (the first ghost char, if any).
+    const cur = (ch, cls) => `<span class="cursor${blinkOn ? '' : ' off'}${cls ? ' ' + cls : ''}">${esc(ch || ' ')}</span>`;
+    const rp = s.spinner
+      ? `<span class="rp ye">${SPINNER[Math.floor(t / 80) % SPINNER.length]}</span>` : '';
+    let input;
+    if (s.capture) input = esc(s.typed) + span('gh', s.ghost);
+    else if (s.rewrite) input = s.rewrite.typedHtml + cur(' ');
+    else if (s.ghostLine) input = cur(s.ghostLine[0], 'gh-cur') + span('gh', s.ghostLine.slice(1));
+    else if (s.ghost) input = esc(s.typed) + cur(s.ghost[0], 'gh-cur') + span('gh', s.ghost.slice(1));
+    else input = esc(s.typed) + cur(' ');
+    html += `<div class="ln">${PROMPT_TOP}</div>`;
+    html += `<div class="ln">${PROMPT}${input}${rp}</div>`;
+    if (s.rewrite) html += `<div class="ln">${s.rewrite.lineHtml}</div>`;
+    if (s.capture) {
+      html += `<div class="ln">${span('gh', 'What should happen instead?')}</div>`;
+      html += `<div class="ln">${span('ye', '›')} ${esc(s.capture.text)}${cur(' ')}</div>`;
+    }
+    if (s.note && s.note.state === 'writing') {
+      html += `<div class="ln">${span('mg', SPINNER[Math.floor(t / 80) % SPINNER.length])} ${span('gh', 'writing a rule…')}</div>`;
+    } else if (s.note) {
+      const age = t - s.note.t;
+      const glow = 1 - ease(age / 1400);
+      html += `<div class="ln note" style="opacity:${ease(age / 260)};text-shadow:0 0 ${14 * glow}px rgba(199,146,234,${0.85 * glow})">`
+        + `<span class="spark">${'✦✧'[Math.floor(age / 280) % 2]}</span> ${span('mg bo', 'rule learned')}`
+        + ` ${span('gh', '· in this repo,')} main ${span('gh', 'is')} ${span('ye bo', 'dev')}</div>`;
+    }
+  }
+  $('content').innerHTML = html;
+  const scroll = s.scrollFrom + (s.scrollCur - s.scrollFrom) * ease((t - s.scrollT0) / 320);
+  $('content').style.transform = `translateY(${-scroll}px)`;
+
+  // Caption crossfade
+  const ct = ease((t - s.captionT0) / 380);
+  $('caption').innerHTML =
+    captionHtml(s.captionPrev, 1 - ct, -10 * ct) + captionHtml(s.caption, ct, 10 * (1 - ct));
+
+  // Keycap pop
+  let keyHtml = '';
+  if (s.key) {
+    const age = t - s.key.t;
+    if (age < 700) {
+      const inA = ease(age / 120), outA = 1 - ease((age - 450) / 250);
+      const press = age < 140 ? 3 : 0;
+      const label = { '⏎': '⏎<small>enter</small>', '→': '→<small>accept</small>',
+        'ctrl+O': 'ctrl + O<small>rule</small>' }[s.key.label];
+      keyHtml = `<div class="key" style="opacity:${Math.min(inA, outA)};transform:translateY(${press + 10 * (1 - inA)}px) scale(${0.92 + 0.08 * inA})">${label}</div>`;
+    }
+  }
+  $('keys').innerHTML = keyHtml;
+
+  // A band of light across the terminal as the rule is learned
+  const shineAge = s.note && s.note.state === 'done' ? t - s.note.t : -1;
+  if (shineAge >= 0 && shineAge < 900) {
+    const x = ease(shineAge / 900);
+    $('shine').style.opacity = 0.9 * Math.sin(Math.PI * Math.min(1, shineAge / 900));
+    $('shine').style.transform = `translateX(${-60 + 220 * x}%) skewX(-18deg)`;
+  } else {
+    $('shine').style.opacity = 0;
+  }
+
+  // Slow push-in + fade in/out for a clean loop. With ?flat there is no
+  // push-in: in a GIF it would make every frame differ from the last all
+  // over, and the file many times larger.
+  const p = t / DURATION;
+  $('stage').style.transform = FLAT ? 'none' : `scale(${1 + 0.035 * p})`;
+  const fade = Math.max(1 - ease(t / 450), ease((t - (DURATION - 450)) / 450));
+  $('fade').style.opacity = fade;
+};
+window.render(0);
+</script>
+</body>
+</html>

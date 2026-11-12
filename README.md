@@ -3,7 +3,7 @@
 Local AI command completion for zsh, powered by [ollama](https://ollama.com), your
 command history and your directory context.
 
-![zsh-autocompLlama turning plain English, a half-typed command and a typo into real commands](assets/demo.gif)
+![zsh-autocompLlama turning plain English, a half-typed command and a typo into real commands, then learning a rule from one sentence](assets/demo.gif)
 
 ## Requirements
 
