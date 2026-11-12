@@ -38,6 +38,9 @@ _ZSH_AUTOCOMPLLAMA_SETTINGS=(
   "ZSH_AUTOCOMPLLAMA_MAX_PROJECT_ENTRIES|int|8|Make targets, npm scripts etc. sent as context, per kind"
   "ZSH_AUTOCOMPLLAMA_LOG|text||Log file of every request (empty = off)"
   "ZSH_AUTOCOMPLLAMA_NUM_CTX|int|4096|Model context window"
+  "ZSH_AUTOCOMPLLAMA_RULE_MODEL|choice:_zsh_autocompllama_rule_model_choices|qwen2.5-coder:7b|Model that writes rules (ctrl+O at the prompt)"
+  "ZSH_AUTOCOMPLLAMA_RULE_ROUNDS|int|4|Attempts that model gets at a rule"
+  "ZSH_AUTOCOMPLLAMA_RULE_HINT|int|3|Mentions of the rule key beside a suggestion, per shell (0 = never)"
 )
 
 _zsh_autocompllama_fresh_choices() {
@@ -57,6 +60,20 @@ _zsh_autocompllama_model_choices() {
     qwen2.5-coder:1.5b "quick, about 1 GB" \
     qwen2.5-coder:3b   "the default, about 2 GB, a few hundred ms per suggestion" \
     qwen2.5-coder:7b   "best judgement, about 4.7 GB, roughly double the latency"; do
+    print -r -- "$m|$note$( (( ${pulled[(Ie)$m]} )) && print -n ' (pulled)' || print -n ' (not pulled yet)' )"
+  done
+}
+
+# The models worth choosing between for writing rules: this one runs for a
+# few seconds now and then, not on every pause, so it can be large.
+_zsh_autocompllama_rule_model_choices() {
+  local -a pulled
+  pulled=( ${(f)"$(ollama list 2>/dev/null | awk 'NR > 1 { print $1 }')"} )
+  local m note
+  for m note in \
+    qwen2.5-coder:7b  "the default, about 4.7 GB while a rule is written" \
+    qwen2.5-coder:14b "better judgement, about 9 GB" \
+    qwen2.5-coder:32b "best judgement, about 20 GB"; do
     print -r -- "$m|$note$( (( ${pulled[(Ie)$m]} )) && print -n ' (pulled)' || print -n ' (not pulled yet)' )"
   done
 }
@@ -289,8 +306,8 @@ _zsh_autocompllama_configure_tui() {
         case $kind in
           bool) [[ ${(P)var} == 1 ]] && new=0 || new=1 ;;
           onoff) [[ -n ${(P)var} ]] && new= || new=$default ;;
-          choice:_zsh_autocompllama_model_choices)
-            _zal_model "${(P)var}" || continue
+          choice:_zsh_autocompllama_(rule_|)model_choices)
+            _zal_model "${(P)var}" ${kind#choice:} || continue
             new=$REPLY ;;
           choice:*)
             _zal_select "$label" "${(P)var}" ${(f)"$(${kind#choice:})"} || continue
@@ -307,7 +324,7 @@ _zsh_autocompllama_configure_tui() {
       changed=1
       _zsh_autocompllama_setting_display $var $kind
       notice="${_ZAL_G}✓${_ZAL_R} ${label}: ${REPLY}"
-      if [[ $var == ZSH_OLLAMA_MODEL ]] && ! ollama list 2>/dev/null | awk 'NR > 1 { print $1 }' | grep -qx -- "${(P)var}"; then
+      if [[ $var == (ZSH_OLLAMA_MODEL|ZSH_AUTOCOMPLLAMA_RULE_MODEL) ]] && ! ollama list 2>/dev/null | awk 'NR > 1 { print $1 }' | grep -qx -- "${(P)var}"; then
         if _zal_confirm "${(P)var} is not pulled yet. Pull it now?" y; then
           _zal_end "${_ZAL_D}ollama pull ${(P)var}${_ZAL_R}"
           if ollama pull "${(P)var}"; then notice="${_ZAL_G}✓${_ZAL_R} pulled ${(P)var}"

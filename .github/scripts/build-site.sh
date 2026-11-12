@@ -71,6 +71,22 @@ mkdir -p "$out"
   echo '```zsh'
   cat "$root/rules.zsh"
   echo '```'
+  echo
+  echo "---"
+  echo
+  echo "# jobs.zsh (background builds: a larger model writes a rule from an instruction)"
+  echo
+  echo '```zsh'
+  cat "$root/jobs.zsh"
+  echo '```'
+  echo
+  echo "---"
+  echo
+  echo "# rules-tui.zsh (the rules screen: rules, their tests, builds)"
+  echo
+  echo '```zsh'
+  cat "$root/rules-tui.zsh"
+  echo '```'
 } > "$out/llms-full.txt"
 
 # ---- llms.txt -------------------------------------------------------------
